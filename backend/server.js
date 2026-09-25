@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const multer = require("multer");
 const path = require("path");
+const { pool } = require("./database");
 
 const { publicarNoInstagram } = require("./instagram");
 
@@ -14,6 +15,38 @@ const upload = multer({
 app.use(express.json());
 app.use(cors());
 
+app.get("/publicacoes", async (req, res) => {
+    try {
+        const resultado = await pool.query(`
+            SELECT
+                p.id,
+                p.conta_id,
+                p.imagem,
+                p.texto,
+                p.data_hora,
+                p.status,
+                p.erro,
+                c.nome AS conta,
+                c.username
+            FROM publicacoes p
+            INNER JOIN contas_instagram c
+                ON c.id = p.conta_id
+            ORDER BY p.data_hora DESC
+        `);
+
+        res.json(resultado.rows);
+
+    } catch (erro) {
+        console.error("Erro ao buscar publicações:");
+        console.error(erro);
+
+        res.status(500).json({
+            sucesso: false,
+            mensagem: "Erro ao buscar publicações.",
+            erro: erro.message
+        });
+    }
+});
 
 /*
 |--------------------------------------------------------------------------

@@ -1,1617 +1,697 @@
 <template>
-  <div class="app">
+  <AppLayout>
 
-    <!-- SIDEBAR -->
-    <aside class="sidebar">
+    <div class="create-page">
 
-      <div class="logo">
-        <span class="logo-icon">◎</span>
-        <span>IG Manager</span>
+      <div class="page-header">
+        <h1>Nova publicação</h1>
+
+        <p>
+          Crie uma nova publicação para o Instagram.
+        </p>
       </div>
 
-      <nav class="menu">
+      <section class="create-card">
 
-        <button class="menu-item">
-          <span class="menu-icon">⌂</span>
-          <span>Início</span>
-        </button>
+        <!-- UPLOAD -->
+        <div
+          class="upload-area"
+          @click="selecionarImagem"
+        >
 
-        <button class="menu-item active">
-          <span class="menu-icon">＋</span>
-          <span>Criar</span>
-        </button>
+          <input
+            ref="inputImagem"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            hidden
+            @change="selecionarArquivo"
+          />
 
-      </nav>
+          <template v-if="preview">
 
-    </aside>
-
-
-    <!-- CONTEÚDO -->
-    <main class="content">
-
-      <header class="topbar">
-
-        <div>
-          <h1>Nova publicação</h1>
-
-          <p>
-            Crie uma nova publicação para o Instagram.
-          </p>
-        </div>
-
-      </header>
-
-
-      <section class="create-area">
-
-        <div class="publication-card">
-
-
-          <!-- =========================
-               IMAGEM
-          ========================== -->
-
-          <div
-            class="upload-area"
-            :class="{ 'has-image': previewUrl }"
-            @click="abrirArquivo"
-          >
-
-            <template v-if="previewUrl">
-
-              <img
-                :src="previewUrl"
-                alt="Pré-visualização da imagem"
-                class="preview"
-              />
-
-              <div class="change-image">
-                Alterar imagem
-              </div>
-
-            </template>
-
-
-            <template v-else>
-
-              <div class="upload-icon">
-                ＋
-              </div>
-
-              <h3>
-                Adicionar uma imagem
-              </h3>
-
-              <p>
-                Clique para selecionar uma imagem
-              </p>
-
-              <span class="formats">
-                JPG, PNG ou WEBP
-              </span>
-
-            </template>
-
-
-            <input
-              ref="fileInput"
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              @change="selecionarImagem"
-              hidden
+            <img
+              :src="preview"
+              class="preview"
+              alt="Pré-visualização"
             />
 
-          </div>
+          </template>
 
+          <template v-else>
 
-          <!-- =========================
-               LEGENDA
-          ========================== -->
-
-          <div class="field">
-
-            <div class="field-header">
-
-              <label>
-                Legenda
-              </label>
-
-              <span>
-                {{ texto.length }}/2200
-              </span>
-
+            <div class="upload-icon">
+              +
             </div>
 
+            <strong>
+              Adicionar uma imagem
+            </strong>
 
-            <textarea
-              v-model="texto"
-              maxlength="2200"
-              placeholder="Escreva uma legenda para sua publicação..."
-            ></textarea>
-
-          </div>
-
-
-          <!-- =========================
-               PUBLICAR AGORA
-          ========================== -->
-
-          <button
-            class="publish-button"
-            :disabled="!podePublicarAgora || enviando"
-            @click="publicarAgora"
-          >
-
-            <span v-if="enviando">
-              Publicando...
+            <span>
+              Clique para selecionar uma imagem
             </span>
 
-            <span v-else>
-              Publicar Agora
-            </span>
+            <small>
+              JPG, PNG ou WEBP
+            </small>
 
-          </button>
+          </template>
 
+        </div>
 
-          <!-- =========================
-               AGENDAMENTO
-          ========================== -->
+        <!-- LEGENDA -->
+        <div class="caption-section">
 
-          <div class="schedule-option">
+          <div class="caption-header">
 
-            <label class="schedule-label">
-
-              <span>
-                Deseja agendar publicação?
-              </span>
-
-              <input
-                v-model="agendar"
-                type="checkbox"
-              />
-
-              <span class="switch"></span>
-
+            <label>
+              Legenda
             </label>
 
+            <span>
+              {{ texto.length }}/2200
+            </span>
+
           </div>
 
+          <textarea
+            v-model="texto"
+            maxlength="2200"
+            placeholder="Escreva uma legenda para sua publicação..."
+          />
 
-          <!-- =========================
-               DATA E HORÁRIO
-          ========================== -->
+        </div>
+
+        <!-- PUBLICAR -->
+        <button
+          class="publish-button"
+          :disabled="carregando"
+          @click="publicarAgora"
+        >
+          {{ carregando ? "Publicando..." : "Publicar Agora" }}
+        </button>
+
+        <!-- AGENDAMENTO -->
+        <div class="schedule-section">
+
+          <label class="schedule-toggle">
+
+            <input
+              v-model="agendar"
+              type="checkbox"
+            />
+
+            <span>
+              Deseja agendar publicação?
+            </span>
+
+          </label>
 
           <div
             v-if="agendar"
             class="schedule-fields"
           >
 
-            <!-- DATA -->
+            <div>
+              <label>Data</label>
 
-            <div class="field">
-
-              <label>
-                Data
-              </label>
-
-              <div class="input-with-icon">
-
-                <input
-                  v-model="dataSelecionada"
-                  type="date"
-                  class="datetime"
-                />
-
-                <span class="calendar-icon">
-                  ▣
-                </span>
-
-              </div>
-
+              <input
+                v-model="dataSelecionada"
+                type="date"
+              />
             </div>
 
+            <div>
+              <label>Horário</label>
 
-            <!-- HORÁRIO -->
-
-            <div class="field">
-
-              <label>
-                Horário
-              </label>
-
-              <div class="input-with-icon">
-
-                <input
-                  v-model="horaSelecionada"
-                  type="time"
-                  class="datetime"
-                />
-
-                <span class="clock-icon">
-                  ◷
-                </span>
-
-              </div>
-
+              <input
+                v-model="horaSelecionada"
+                type="time"
+              />
             </div>
 
           </div>
-
-
-          <!-- =========================
-               BOTÃO AGENDAR
-          ========================== -->
 
           <button
             v-if="agendar"
             class="schedule-button"
-            :disabled="!podeAgendar || enviando"
+            :disabled="carregando"
             @click="agendarPublicacao"
           >
-
-            <span v-if="enviando">
-              Agendando...
-            </span>
-
-            <span v-else>
-              Agendar Publicação
-            </span>
-
+            {{ carregando ? "Agendando..." : "Agendar Publicação" }}
           </button>
 
+        </div>
 
-          <!-- =========================
-               MENSAGEM
-          ========================== -->
-
-          <div
-            v-if="mensagem"
-            class="message"
-            :class="sucesso ? 'success' : 'error'"
-          >
-            {{ mensagem }}
-          </div>
-
-
+        <!-- MENSAGEM -->
+        <div
+          v-if="mensagem"
+          class="message"
+          :class="{ success: sucesso }"
+        >
+          {{ mensagem }}
         </div>
 
       </section>
 
-    </main>
+    </div>
 
-  </div>
+  </AppLayout>
 </template>
 
-
 <script setup>
+import { computed, ref } from "vue";
+import AppLayout from "../components/AppLayout.vue";
 
-import {
-  ref,
-  computed,
-  onUnmounted
-} from "vue";
+const inputImagem = ref(null);
 
-
-/* =====================================================
-   INPUT DE ARQUIVO
-===================================================== */
-
-const fileInput = ref(null);
-
-
-/* =====================================================
-   IMAGEM
-===================================================== */
-
-const imagem = ref(null);
-
-const previewUrl = ref(null);
-
-
-/* =====================================================
-   FORMULÁRIO
-===================================================== */
+const arquivo = ref(null);
+const preview = ref("");
 
 const texto = ref("");
 
+const agendar = ref(false);
 const dataSelecionada = ref("");
-
 const horaSelecionada = ref("");
 
-const agendar = ref(false);
-
-
-/* =====================================================
-   STATUS
-===================================================== */
-
 const mensagem = ref("");
-
 const sucesso = ref(false);
+const carregando = ref(false);
 
-const enviando = ref(false);
+function selecionarImagem() {
+  inputImagem.value?.click();
+}
 
+function selecionarArquivo(event) {
 
-/* =====================================================
-   VALIDAÇÃO
-===================================================== */
+  const file = event.target.files?.[0];
 
-const podePublicarAgora = computed(() => {
+  if (!file) {
+    return;
+  }
+
+  arquivo.value = file;
+
+  preview.value = URL.createObjectURL(file);
+
+  mensagem.value = "";
+}
+
+const formularioValido = computed(() => {
+
+  if (!arquivo.value) {
+    return false;
+  }
+
+  if (!agendar.value) {
+    return true;
+  }
 
   return (
-    imagem.value &&
-    texto.value.trim()
-  );
-
-});
-
-
-const podeAgendar = computed(() => {
-
-  return (
-    imagem.value &&
-    texto.value.trim() &&
     dataSelecionada.value &&
     horaSelecionada.value
   );
-
 });
 
+async function enviarPublicacao(dataHora) {
 
-/* =====================================================
-   ABRIR SELETOR
-===================================================== */
-
-function abrirArquivo() {
-
-  fileInput.value?.click();
-
-}
-
-
-/* =====================================================
-   SELECIONAR IMAGEM
-===================================================== */
-
-function selecionarImagem(event) {
-
-  const arquivo = event.target.files?.[0];
-
-
-  if (!arquivo) {
-    return;
-  }
-
-
-  const tiposPermitidos = [
-    "image/jpeg",
-    "image/png",
-    "image/webp"
-  ];
-
-
-  if (!tiposPermitidos.includes(arquivo.type)) {
-
-    mensagem.value =
-      "Selecione uma imagem JPG, PNG ou WEBP.";
-
+  if (!arquivo.value) {
+    mensagem.value = "Selecione uma imagem.";
     sucesso.value = false;
-
     return;
-
   }
 
+  const formData = new FormData();
 
-  imagem.value = arquivo;
+  formData.append("imagem", arquivo.value);
+  formData.append("texto", texto.value);
 
+  if (dataHora) {
+    formData.append("dataHora", dataHora);
+  }
 
-  if (previewUrl.value) {
+  const resposta = await fetch(
+    "http://localhost:3000/publicacoes",
+    {
+      method: "POST",
+      body: formData
+    }
+  );
 
-    URL.revokeObjectURL(
-      previewUrl.value
+  const resultado = await resposta.json();
+
+  if (!resposta.ok) {
+    throw new Error(
+      resultado.mensagem ||
+      "Erro ao processar publicação."
     );
-
   }
 
-
-  previewUrl.value =
-    URL.createObjectURL(arquivo);
-
-
-  mensagem.value = "";
-
+  return resultado;
 }
-
-
-/* =====================================================
-   PUBLICAR AGORA
-===================================================== */
 
 async function publicarAgora() {
 
-  if (
-    !podePublicarAgora.value ||
-    enviando.value
-  ) {
+  if (!arquivo.value) {
+    mensagem.value = "Selecione uma imagem antes de publicar.";
+    sucesso.value = false;
     return;
   }
 
-
-  enviando.value = true;
-
+  carregando.value = true;
   mensagem.value = "";
 
-
   try {
-
-    const formData =
-      new FormData();
-
-
-    formData.append(
-      "imagem",
-      imagem.value
-    );
-
-
-    formData.append(
-      "texto",
-      texto.value
-    );
-
-
-    /*
-     * Para publicação imediata,
-     * enviamos a data/hora atual.
-     */
 
     const agora = new Date();
 
     const dataAtual =
-      agora.toISOString()
-        .slice(0, 10);
+      agora.toLocaleDateString("sv-SE");
 
     const horaAtual =
-      agora.toTimeString()
-        .slice(0, 5);
+      agora.toTimeString().slice(0, 5);
 
-
-    const dataHora =
-      `${dataAtual}T${horaAtual}`;
-
-
-    formData.append(
-      "dataHora",
-      dataHora
+    await enviarPublicacao(
+      `${dataAtual}T${horaAtual}`
     );
-
-
-    const resposta =
-      await fetch(
-        "http://localhost:3000/publicacoes",
-        {
-          method: "POST",
-          body: formData
-        }
-      );
-
-
-    const resultado =
-      await resposta.json();
-
-
-    if (
-      !resposta.ok ||
-      !resultado.sucesso
-    ) {
-
-      throw new Error(
-        resultado.mensagem ||
-        "Não foi possível publicar."
-      );
-
-    }
-
 
     sucesso.value = true;
 
     mensagem.value =
-      "Publicação realizada com sucesso!";
+      "Publicação enviada com sucesso.";
 
+  } catch (error) {
 
-  } catch (erro) {
+    console.error(error);
 
     sucesso.value = false;
 
     mensagem.value =
-      erro.message ||
-      "Ocorreu um erro ao publicar.";
+      error.message ||
+      "Não foi possível publicar.";
 
   } finally {
 
-    enviando.value = false;
+    carregando.value = false;
 
   }
-
 }
-
-
-/* =====================================================
-   AGENDAR PUBLICAÇÃO
-===================================================== */
 
 async function agendarPublicacao() {
 
   if (
-    !podeAgendar.value ||
-    enviando.value
+    !dataSelecionada.value ||
+    !horaSelecionada.value
   ) {
+    mensagem.value =
+      "Informe a data e o horário.";
+
+    sucesso.value = false;
+
     return;
   }
 
-
-  enviando.value = true;
-
+  carregando.value = true;
   mensagem.value = "";
-
 
   try {
 
-    const formData =
-      new FormData();
-
-
-    formData.append(
-      "imagem",
-      imagem.value
+    await enviarPublicacao(
+      `${dataSelecionada.value}T${horaSelecionada.value}`
     );
-
-
-    formData.append(
-      "texto",
-      texto.value
-    );
-
-
-    const dataHora =
-      `${dataSelecionada.value}T${horaSelecionada.value}`;
-
-
-    formData.append(
-      "dataHora",
-      dataHora
-    );
-
-
-    const resposta =
-      await fetch(
-        "http://localhost:3000/publicacoes",
-        {
-          method: "POST",
-          body: formData
-        }
-      );
-
-
-    const resultado =
-      await resposta.json();
-
-
-    if (
-      !resposta.ok ||
-      !resultado.sucesso
-    ) {
-
-      throw new Error(
-        resultado.mensagem ||
-        "Não foi possível agendar."
-      );
-
-    }
-
 
     sucesso.value = true;
 
     mensagem.value =
-      resultado.mensagem ||
-      "Publicação agendada com sucesso!";
+      "Publicação agendada com sucesso.";
 
+  } catch (error) {
 
-  } catch (erro) {
+    console.error(error);
 
     sucesso.value = false;
 
     mensagem.value =
-      erro.message ||
-      "Ocorreu um erro ao agendar.";
+      error.message ||
+      "Não foi possível agendar.";
 
   } finally {
 
-    enviando.value = false;
+    carregando.value = false;
 
   }
-
 }
-
-
-/* =====================================================
-   LIMPAR PREVIEW
-===================================================== */
-
-onUnmounted(() => {
-
-  if (previewUrl.value) {
-
-    URL.revokeObjectURL(
-      previewUrl.value
-    );
-
-  }
-
-});
-
 </script>
-
 
 <style scoped>
 
-/* =====================================================
-   RESET
-===================================================== */
-
-* {
-  box-sizing: border-box;
-}
-
-:global(html),
-:global(body),
-:global(#app) {
-
+.create-page {
   width: 100%;
-  min-width: 100%;
-  min-height: 100vh;
-
-  margin: 0;
-  padding: 0;
-
-}
-
-:global(body) {
-
-  overflow-x: hidden;
-
-}
-
-
-/* =====================================================
-   APP
-===================================================== */
-
-.app {
-
-  width: 100%;
-  min-width: 100vw;
-  min-height: 100vh;
-
-  background: #fafafa;
-
-  color: #262626;
-
-  font-family:
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    Roboto,
-    Helvetica,
-    Arial,
-    sans-serif;
-
-  display: flex;
-
-}
-
-
-/* =====================================================
-   SIDEBAR
-===================================================== */
-
-.sidebar {
-
-  width: 230px;
-  min-width: 230px;
-
-  height: 100vh;
-
-  position: fixed;
-
-  left: 0;
-  top: 0;
-
-  background: #ffffff;
-
-  border-right: 1px solid #dbdbdb;
-
-  padding: 28px 14px;
-
-  display: flex;
-
-  flex-direction: column;
-
-  z-index: 20;
-
-}
-
-
-.logo {
-
-  display: flex;
-
-  align-items: center;
-
-  gap: 10px;
-
-  padding: 8px 12px 38px;
-
-  font-size: 21px;
-
-  font-weight: 700;
-
-}
-
-
-.logo-icon {
-
-  width: 34px;
-  height: 34px;
-
-  border-radius: 10px;
-
-  display: flex;
-
-  align-items: center;
-  justify-content: center;
-
-  color: #ffffff;
-
-  background:
-    linear-gradient(
-      135deg,
-      #feda75,
-      #fa7e1e,
-      #d62976,
-      #962fbf,
-      #4f5bd5
-    );
-
-  font-size: 23px;
-
-}
-
-
-.menu {
-
-  display: flex;
-
-  flex-direction: column;
-
-  gap: 4px;
-
-}
-
-
-.menu-item {
-
-  width: 100%;
-
-  border: none;
-
-  background: transparent;
-
-  color: #262626;
-
-  padding: 13px 14px;
-
-  border-radius: 10px;
-
-  display: flex;
-
-  align-items: center;
-
-  gap: 15px;
-
-  font-size: 15px;
-
-  text-align: left;
-
-  cursor: pointer;
-
-}
-
-
-.menu-item:hover {
-
-  background: #f5f5f5;
-
-}
-
-
-.menu-item.active {
-
-  background: #f0f0f0;
-
-  font-weight: 700;
-
-}
-
-
-.menu-icon {
-
-  width: 24px;
-
-  display: flex;
-
-  align-items: center;
-  justify-content: center;
-
-  font-size: 21px;
-
-}
-
-
-/* =====================================================
-   CONTEÚDO
-===================================================== */
-
-.content {
-
-  width: calc(100vw - 230px);
-
-  min-width: 0;
-
-  min-height: 100vh;
-
-  margin-left: 230px;
-
-  padding: 45px 50px;
-
-  background: #fafafa;
-
-}
-
-
-.topbar {
-
-  width: 100%;
-
   max-width: 850px;
-
-  margin: 0 auto 30px;
-
+  margin: 0 auto;
 }
 
+/* =========================
+   CABEÇALHO
+========================= */
 
-.topbar h1 {
+.page-header {
+  margin-bottom: 28px;
+}
 
-  margin: 0;
+.page-header h1 {
+  margin: 0 0 8px;
+
+  color: #151515;
 
   font-size: 26px;
-
   font-weight: 700;
-
 }
 
+.page-header p {
+  margin: 0;
 
-.topbar p {
+  color: #777;
 
-  margin: 6px 0 0;
-
-  color: #737373;
-
-  font-size: 13px;
-
+  font-size: 14px;
 }
 
-
-/* =====================================================
-   ÁREA
-===================================================== */
-
-.create-area {
-
-  width: 100%;
-
-  max-width: 850px;
-
-  margin: 0 auto;
-
-}
-
-
-/* =====================================================
+/* =========================
    CARD
-===================================================== */
+========================= */
 
-.publication-card {
-
-  width: 100%;
-
+.create-card {
   background: #ffffff;
 
-  border: 1px solid #dbdbdb;
-
-  border-radius: 14px;
+  border: 1px solid #dddddd;
+  border-radius: 11px;
 
   padding: 24px;
 
-  box-shadow:
-    0 2px 10px rgba(0, 0, 0, 0.025);
-
+  box-sizing: border-box;
 }
 
-
-/* =====================================================
+/* =========================
    UPLOAD
-===================================================== */
+========================= */
 
 .upload-area {
-
   width: 100%;
-
   height: 330px;
 
-  position: relative;
-
-  overflow: hidden;
-
-  border: 1.5px dashed #c8c8c8;
-
-  border-radius: 10px;
-
-  background: #fafafa;
-
   display: flex;
-
   flex-direction: column;
-
   align-items: center;
-
   justify-content: center;
+
+  box-sizing: border-box;
+
+  border: 1px dashed #cccccc;
+  border-radius: 9px;
+
+  background: #fff;
 
   cursor: pointer;
 
+  transition: background 0.15s ease;
 }
-
 
 .upload-area:hover {
-
-  border-color: #999999;
-
-  background: #f7f7f7;
-
+  background: #fafafa;
 }
 
-
 .upload-icon {
-
-  width: 58px;
-  height: 58px;
-
-  border-radius: 50%;
-
-  background: #262626;
-
-  color: #ffffff;
+  width: 59px;
+  height: 59px;
 
   display: flex;
-
   align-items: center;
   justify-content: center;
 
-  font-size: 32px;
-
   margin-bottom: 15px;
 
+  border-radius: 50%;
+
+  background: #252525;
+
+  color: white;
+
+  font-size: 30px;
+  font-weight: 300;
 }
 
+.upload-area strong {
+  margin-bottom: 7px;
 
-.upload-area h3 {
-
-  margin: 0 0 6px;
+  color: #222;
 
   font-size: 16px;
-
 }
 
+.upload-area span {
+  margin-bottom: 10px;
 
-.upload-area p {
+  color: #777;
 
-  margin: 0;
-
-  color: #737373;
-
-  font-size: 13px;
-
+  font-size: 14px;
 }
 
+.upload-area small {
+  color: #aaa;
 
-.formats {
-
-  margin-top: 10px;
-
-  color: #aaaaaa;
-
-  font-size: 11px;
-
+  font-size: 12px;
 }
-
 
 .preview {
-
   width: 100%;
   height: 100%;
 
   object-fit: contain;
 
-  background: #111111;
-
+  border-radius: 8px;
 }
 
+/* =========================
+   LEGENDA
+========================= */
 
-.change-image {
-
-  position: absolute;
-
-  left: 50%;
-  bottom: 15px;
-
-  transform: translateX(-50%);
-
-  padding: 8px 14px;
-
-  border-radius: 20px;
-
-  background: rgba(0, 0, 0, 0.72);
-
-  color: #ffffff;
-
-  font-size: 11px;
-
+.caption-section {
+  margin-top: 22px;
 }
 
-
-/* =====================================================
-   CAMPOS
-===================================================== */
-
-.field {
-
-  margin-top: 20px;
-
-}
-
-
-.field-header {
-
+.caption-header {
   display: flex;
-
-  align-items: center;
-
   justify-content: space-between;
 
+  margin-bottom: 6px;
 }
 
-
-.field label {
-
-  display: block;
-
-  margin-bottom: 7px;
+.caption-header label {
+  color: #222;
 
   font-size: 13px;
-
   font-weight: 600;
-
 }
 
-
-.field-header label {
-
-  margin-bottom: 7px;
-
-}
-
-
-.field-header span {
-
-  color: #777777;
+.caption-header span {
+  color: #888;
 
   font-size: 11px;
-
 }
 
-
-/* =====================================================
-   TEXTAREA
-===================================================== */
-
 textarea {
-
   width: 100%;
+  min-height: 100px;
 
-  height: 100px;
+  box-sizing: border-box;
 
-  padding: 12px;
+  padding: 13px;
 
   resize: vertical;
 
-  border: 1px solid #dbdbdb;
-
+  border: 1px solid #d8d8d8;
   border-radius: 8px;
-
-  background: #ffffff;
-
-  color: #262626;
-
-  caret-color: #262626;
 
   outline: none;
 
+  color: #333;
+
   font-family: inherit;
-
   font-size: 13px;
-
-  line-height: 1.5;
-
 }
-
-
-textarea:focus {
-
-  border-color: #999999;
-
-}
-
 
 textarea::placeholder {
-
-  color: #999999;
-
+  color: #999;
 }
 
+textarea:focus {
+  border-color: #aaa;
+}
 
-/* =====================================================
-   BOTÃO PUBLICAR AGORA
-===================================================== */
+/* =========================
+   PUBLICAR
+========================= */
 
 .publish-button {
-
   width: 100%;
 
-  height: 43px;
+  margin-top: 18px;
 
-  margin-top: 20px;
+  padding: 13px;
 
   border: none;
-
   border-radius: 8px;
 
-  color: #ffffff;
+  background: #252525;
+  color: white;
 
-  font-size: 13px;
+  font-family: inherit;
 
-  font-weight: 700;
-
-  background:
-    linear-gradient(
-      90deg,
-      #d62976,
-      #962fbf
-    );
-
-  cursor: pointer;
-
-  transition: 0.2s;
-
-}
-
-
-.publish-button:hover:not(:disabled) {
-
-  transform: translateY(-1px);
-
-  box-shadow:
-    0 5px 15px rgba(150, 47, 191, 0.2);
-
-}
-
-
-.publish-button:disabled {
-
-  background: #d6d6d6;
-
-  cursor: not-allowed;
-
-}
-
-
-/* =====================================================
-   OPÇÃO DE AGENDAMENTO
-===================================================== */
-
-.schedule-option {
-
-  margin-top: 18px;
-
-  padding-top: 16px;
-
-  border-top: 1px solid #eeeeee;
-
-}
-
-
-.schedule-label {
-
-  display: flex;
-
-  align-items: center;
-
-  justify-content: space-between;
-
-  cursor: pointer;
-
-  font-size: 13px;
-
+  font-size: 14px;
   font-weight: 600;
 
+  cursor: pointer;
 }
 
-
-.schedule-label input {
-
-  display: none;
-
+.publish-button:hover {
+  background: #111;
 }
 
-
-/* SWITCH */
-
-.switch {
-
-  width: 40px;
-
-  height: 22px;
-
-  position: relative;
-
-  border-radius: 20px;
-
-  background: #d1d1d1;
-
-  transition: 0.2s;
-
+.publish-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
+/* =========================
+   AGENDAMENTO
+========================= */
 
-.switch::after {
+.schedule-section {
+  margin-top: 24px;
 
-  content: "";
+  padding-top: 20px;
 
-  width: 18px;
-
-  height: 18px;
-
-  position: absolute;
-
-  top: 2px;
-
-  left: 2px;
-
-  border-radius: 50%;
-
-  background: #ffffff;
-
-  box-shadow:
-    0 1px 3px rgba(0, 0, 0, 0.2);
-
-  transition: 0.2s;
-
+  border-top: 1px solid #eeeeee;
 }
 
+.schedule-toggle {
+  display: flex;
+  align-items: center;
 
-/* SWITCH ATIVO */
+  gap: 9px;
 
-.schedule-label input:checked + .switch {
+  color: #333;
 
-  background:
-    linear-gradient(
-      90deg,
-      #d62976,
-      #962fbf
-    );
+  font-size: 13px;
 
+  cursor: pointer;
 }
 
-
-.schedule-label input:checked + .switch::after {
-
-  transform: translateX(18px);
-
+.schedule-toggle input {
+  width: 15px;
+  height: 15px;
 }
-
-
-/* =====================================================
-   CAMPOS DE AGENDAMENTO
-===================================================== */
 
 .schedule-fields {
-
   display: grid;
-
   grid-template-columns: 1fr 1fr;
 
-  gap: 16px;
+  gap: 14px;
 
   margin-top: 18px;
-
 }
 
+.schedule-fields div {
+  display: flex;
+  flex-direction: column;
 
-.schedule-fields .field {
-
-  margin-top: 0;
-
+  gap: 6px;
 }
 
+.schedule-fields label {
+  color: #555;
 
-.input-with-icon {
-
-  position: relative;
-
+  font-size: 12px;
+  font-weight: 600;
 }
 
+.schedule-fields input {
+  padding: 10px;
 
-.datetime {
-
-  width: 100%;
-
-  height: 42px;
-
-  padding: 0 40px 0 12px;
-
-  border: 1px solid #dbdbdb;
-
-  border-radius: 8px;
-
-  background: #ffffff;
-
-  color: #262626;
+  border: 1px solid #d8d8d8;
+  border-radius: 7px;
 
   outline: none;
 
   font-family: inherit;
-
   font-size: 13px;
-
-  color-scheme: light;
-
-  cursor: pointer;
-
 }
-
-
-.datetime:focus {
-
-  border-color: #999999;
-
-}
-
-
-.calendar-icon,
-.clock-icon {
-
-  position: absolute;
-
-  right: 12px;
-
-  top: 50%;
-
-  transform: translateY(-50%);
-
-  color: #666666;
-
-  pointer-events: none;
-
-}
-
-
-.datetime::-webkit-calendar-picker-indicator {
-
-  position: absolute;
-
-  right: 10px;
-
-  opacity: 0;
-
-  width: 25px;
-
-  height: 25px;
-
-  cursor: pointer;
-
-}
-
-
-/* =====================================================
-   BOTÃO AGENDAR
-===================================================== */
 
 .schedule-button {
-
   width: 100%;
 
-  height: 42px;
+  margin-top: 15px;
 
-  margin-top: 18px;
+  padding: 12px;
 
-  border: 1px solid #dbdbdb;
-
+  border: 1px solid #ccc;
   border-radius: 8px;
 
-  background: #ffffff;
+  background: white;
+  color: #333;
 
-  color: #262626;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+
+  cursor: pointer;
+}
+
+.schedule-button:hover {
+  background: #f5f5f5;
+}
+
+/* =========================
+   MENSAGEM
+========================= */
+
+.message {
+  margin-top: 15px;
+
+  padding: 12px;
+
+  border-radius: 7px;
+
+  background: #f0f0f0;
+
+  color: #444;
 
   font-size: 13px;
 
-  font-weight: 700;
-
-  cursor: pointer;
-
-  transition: 0.2s;
-
+  text-align: center;
 }
-
-
-.schedule-button:hover:not(:disabled) {
-
-  background: #f5f5f5;
-
-}
-
-
-.schedule-button:disabled {
-
-  color: #999999;
-
-  background: #f5f5f5;
-
-  cursor: not-allowed;
-
-}
-
-
-/* =====================================================
-   MENSAGEM
-===================================================== */
-
-.message {
-
-  margin-top: 18px;
-
-  padding: 11px 13px;
-
-  border-radius: 8px;
-
-  font-size: 12px;
-
-}
-
 
 .message.success {
-
-  color: #16803c;
-
-  background: #ecfdf3;
-
-  border: 1px solid #bbf7d0;
-
+  background: #eeeeee;
+  color: #222;
 }
 
-
-.message.error {
-
-  color: #d92d20;
-
-  background: #fff1f2;
-
-  border: 1px solid #fecdd3;
-
-}
-
-
-/* =====================================================
+/* =========================
    RESPONSIVO
-===================================================== */
+========================= */
 
-@media (max-width: 700px) {
+@media (max-width: 650px) {
 
-  .sidebar {
-
-    width: 68px;
-
-    min-width: 68px;
-
-    padding: 20px 8px;
-
+  .create-card {
+    padding: 15px;
   }
-
-
-  .logo {
-
-    justify-content: center;
-
-  }
-
-
-  .logo span:last-child {
-
-    display: none;
-
-  }
-
-
-  .menu-item {
-
-    justify-content: center;
-
-  }
-
-
-  .menu-item span:last-child {
-
-    display: none;
-
-  }
-
-
-  .content {
-
-    width: calc(100vw - 68px);
-
-    margin-left: 68px;
-
-    padding: 30px 15px;
-
-  }
-
-
-  .publication-card {
-
-    padding: 18px;
-
-  }
-
 
   .upload-area {
-
-    height: 280px;
-
+    height: 270px;
   }
-
 
   .schedule-fields {
-
     grid-template-columns: 1fr;
-
-    gap: 0;
-
-  }
-
-
-  .schedule-fields .field + .field {
-
-    margin-top: 20px;
-
   }
 
 }
