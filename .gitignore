@@ -9,6 +9,7 @@ dist/
 
 # Dados gerados em tempo de execução (uploads, logs, sessão do Instagram)
 backend/storage/
+backend/uploads/
 
 # Sessões e perfis de navegador (contêm cookies: NUNCA versionar)
 auth.json
