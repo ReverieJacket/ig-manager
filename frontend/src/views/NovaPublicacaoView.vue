@@ -111,14 +111,27 @@
         </template>
       </div>
 
+      <p v-if="form.enviando.value" class="progress-hint" role="status">
+        A publicação é feita por um navegador automático e pode levar cerca de
+        1 minuto. Não feche a janela do navegador que abrir; ela fecha sozinha
+        ao terminar.
+      </p>
+
       <div
         v-if="form.mensagem.value"
         class="message"
-        :class="form.sucesso.value ? 'success' : 'error'"
+        :class="
+          form.sucesso.value ? 'success' : form.incerto.value ? 'warning' : 'error'
+        "
         role="status"
         aria-live="polite"
       >
+        <strong v-if="form.sucesso.value">✓ </strong>
+        <strong v-else-if="form.incerto.value">⚠ Confira o perfil: </strong>
         {{ form.mensagem.value }}
+        <router-link v-if="form.sucesso.value" to="/postagens">
+          Ver em Postagens
+        </router-link>
       </div>
     </section>
   </div>
@@ -242,6 +255,24 @@ textarea.campo {
 .message.success {
   background: var(--cor-sucesso-fundo);
   color: var(--cor-sucesso-texto);
+}
+
+.message.warning {
+  background: #fff6e0;
+  color: #7a5200;
+}
+
+.message a {
+  margin-left: 6px;
+  color: inherit;
+  font-weight: 600;
+}
+
+.progress-hint {
+  margin: 0;
+  color: var(--cor-texto-suave);
+  font-size: 12px;
+  text-align: center;
 }
 
 .message.error {

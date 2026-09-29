@@ -100,6 +100,9 @@ async function publicarNoInstagram(caminhoImagem, legenda, mimetype) {
         await passos.avancarEditor(pagina);
         await passos.preencherLegenda(pagina, legenda);
 
+        // Deve começar antes do clique, para não perder a resposta da API.
+        const monitor = passos.monitorarCriacaoPost(pagina);
+
         log.info("Localizando botão Compartilhar.");
         const botaoCompartilhar = await passos.localizarBotaoCompartilhar(pagina);
 
@@ -115,7 +118,9 @@ async function publicarNoInstagram(caminhoImagem, legenda, mimetype) {
         await botaoCompartilhar.click({ timeout: 10000 });
         compartilhou = true;
 
-        const confirmacao = await passos.aguardarConfirmacao(pagina);
+        const confirmacao = await passos.aguardarConfirmacao(pagina, monitor);
+
+        log.info(`Desfecho: ${confirmacao.evidencia}`);
 
         if (confirmacao.confirmada) {
             await salvarScreenshot(pagina, "publicacao-confirmada");
@@ -123,7 +128,18 @@ async function publicarNoInstagram(caminhoImagem, legenda, mimetype) {
             return {
                 sucesso: true,
                 incerto: false,
-                mensagem: "Publicação confirmada pela mensagem do Instagram.",
+                mensagem: "Publicação confirmada pelo Instagram.",
+                evidencia: confirmacao.evidencia
+            };
+        }
+
+        if (confirmacao.falhou) {
+            await salvarScreenshot(pagina, "publicacao-recusada");
+
+            return {
+                sucesso: false,
+                incerto: false,
+                mensagem: confirmacao.evidencia,
                 evidencia: confirmacao.evidencia
             };
         }

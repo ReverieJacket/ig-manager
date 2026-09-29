@@ -59,8 +59,28 @@ const MENSAGENS_SUCESSO = [
     /post foi compartilhado/i,
     /your post has been shared/i,
     /your post has been posted/i,
-    /post shared/i
+    /post shared/i,
+    /publicação (foi )?(compartilhada|publicada)/i
 ];
+
+/**
+ * Mensagens de falha exibidas pelo Instagram ao tentar compartilhar.
+ * Detectá-las permite encerrar na hora, sem esperar o tempo limite.
+ */
+const MENSAGENS_ERRO = [
+    /não foi possível (compartilhar|publicar)/i,
+    /(erro|problema) ao (compartilhar|publicar)/i,
+    /sua publicação não foi compartilhada/i,
+    /couldn.t (share|post)/i,
+    /your post (wasn.t|was not) shared/i
+];
+
+/**
+ * Requisição que o Instagram Web faz ao concluir uma publicação. Uma
+ * resposta `status: "ok"` é a confirmação mais confiável, pois não
+ * depende do texto nem do layout da tela.
+ */
+const URL_CRIACAO_POST = /\/api\/v1\/media\/configure/i;
 
 const BOTAO_AVANCAR = /^Avançar$/i;
 const BOTAO_COMPARTILHAR = /^Compartilhar$/i;
@@ -75,6 +95,8 @@ module.exports = {
     CAMPOS_UPLOAD,
     CAMPOS_LEGENDA,
     MENSAGENS_SUCESSO,
+    MENSAGENS_ERRO,
+    URL_CRIACAO_POST,
     BOTAO_AVANCAR,
     BOTAO_COMPARTILHAR,
     LINK_NOVO_POST

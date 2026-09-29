@@ -14,8 +14,8 @@ export const API_URL = (
  * Faz uma requisição e devolve o JSON da resposta.
  *
  * O backend responde erros como `{ sucesso: false, mensagem }`; esta
- * função os converte em `Error` com essa mensagem, para que as telas
- * precisem apenas de um `try/catch`.
+ * função os converte em `Error` com essa mensagem (o corpo completo fica
+ * em `erro.dados`), para que as telas precisem apenas de um `try/catch`.
  *
  * @param {string} caminho - Rota da API (ex.: "/contas").
  * @param {RequestInit} [opcoes] - Opções do `fetch`.
@@ -36,7 +36,11 @@ export async function requisicao(caminho, opcoes) {
   const corpo = await resposta.json().catch(() => null);
 
   if (!resposta.ok || corpo?.sucesso === false) {
-    throw new Error(corpo?.mensagem || "Erro ao processar a requisição.");
+    const erro = new Error(corpo?.mensagem || "Erro ao processar a requisição.");
+
+    // Dados extras do backend (ex.: `resultadoIncerto`) para quem precisar.
+    erro.dados = corpo;
+    throw erro;
   }
 
   return corpo;

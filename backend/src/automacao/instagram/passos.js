@@ -147,55 +147,139 @@ async function localizarBotaoCompartilhar(pagina) {
 }
 
 /**
- * Procura uma mensagem explícita de sucesso na página.
- * A simples saída do modal não é considerada confirmação suficiente.
+ * Passa a observar a resposta da API de criação de publicação.
+ * Deve ser chamada ANTES de clicar em "Compartilhar".
  *
  * @param {import("playwright").Page} pagina
- * @returns {Promise<{confirmada: boolean, evidencia?: string}>}
+ * @returns {{resposta: (null|{httpStatus: number, status: (string|null),
+ *            mensagem: (string|null)})}} Objeto atualizado quando a
+ *   resposta chegar.
  */
-async function detectarMensagemSucesso(pagina) {
-    for (const padrao of S.MENSAGENS_SUCESSO) {
-        const mensagem = pagina.getByText(padrao).first();
+function monitorarCriacaoPost(pagina) {
+    const estado = { resposta: null };
 
-        if (await mensagem.isVisible().catch(() => false)) {
-            return {
-                confirmada: true,
-                evidencia: `Mensagem visível: ${padrao}`
-            };
+    pagina.on("response", async (resposta) => {
+        if (
+            !S.URL_CRIACAO_POST.test(resposta.url()) ||
+            resposta.request().method() !== "POST"
+        ) {
+            return;
         }
-    }
 
-    return { confirmada: false };
+        let corpo = null;
+
+        try {
+            corpo = await resposta.json();
+        } catch {
+            // Corpo ausente ou não JSON: vale apenas o status HTTP.
+        }
+
+        estado.resposta = {
+            httpStatus: resposta.status(),
+            status: corpo?.status ?? null,
+            mensagem: corpo?.message ?? null
+        };
+
+        log.debug("Resposta da criação de publicação", estado.resposta);
+    });
+
+    return estado;
 }
 
 /**
- * Aguarda a confirmação visual da publicação, consultando a página em
- * intervalos até `TEMPO.confirmacao`. O clique em "Compartilhar" sozinho
- * NÃO é tratado como sucesso.
+ * Procura na página a primeira mensagem que corresponda a um dos padrões.
  *
  * @param {import("playwright").Page} pagina
- * @returns {Promise<{confirmada: boolean, evidencia: string}>}
+ * @param {RegExp[]} padroes
+ * @returns {Promise<string|null>} O padrão encontrado, ou `null`.
  */
-async function aguardarConfirmacao(pagina) {
+async function encontrarMensagem(pagina, padroes) {
+    for (const padrao of padroes) {
+        const mensagem = pagina.getByText(padrao).first();
+
+        if (await mensagem.isVisible().catch(() => false)) {
+            return String(padrao);
+        }
+    }
+
+    return null;
+}
+
+/**
+ * @typedef {Object} Confirmacao
+ * @property {boolean} confirmada - Publicação confirmada.
+ * @property {boolean} [falhou] - O Instagram recusou de forma explícita.
+ * @property {string} evidencia - Sinal que decidiu o resultado (para log).
+ */
+
+/**
+ * Aguarda o desfecho da publicação e encerra assim que houver um sinal
+ * conclusivo, em ordem de confiabilidade:
+ *
+ * 1. Resposta da API de criação (`status: "ok"` = sucesso; erro = falha);
+ * 2. Mensagem de sucesso na tela;
+ * 3. Mensagem de erro na tela.
+ *
+ * O clique em "Compartilhar" sozinho, ou o modal fechar, NÃO contam como
+ * sucesso. Sem nenhum sinal até `TEMPO.confirmacao`, o resultado é incerto.
+ *
+ * @param {import("playwright").Page} pagina
+ * @param {{resposta: (object|null)}} estado - Retorno de `monitorarCriacaoPost`.
+ * @returns {Promise<Confirmacao>}
+ */
+async function aguardarConfirmacao(pagina, estado) {
     log.info("Aguardando confirmação do Instagram.");
 
     const inicio = Date.now();
 
     while (Date.now() - inicio < S.TEMPO.confirmacao) {
-        const sucesso = await detectarMensagemSucesso(pagina);
+        const api = estado.resposta;
 
-        if (sucesso.confirmada) {
-            log.info(`Publicação confirmada. ${sucesso.evidencia}`);
-            return sucesso;
+        if (api) {
+            if (api.httpStatus === 200 && api.status === "ok") {
+                return {
+                    confirmada: true,
+                    evidencia: "Resposta da API do Instagram: status ok"
+                };
+            }
+
+            if (api.httpStatus >= 400 || api.status === "fail") {
+                return {
+                    confirmada: false,
+                    falhou: true,
+                    evidencia:
+                        `O Instagram recusou a publicação (HTTP ${api.httpStatus}` +
+                        `${api.mensagem ? `: ${api.mensagem}` : ""}).`
+                };
+            }
         }
 
-        await pagina.waitForTimeout(1500);
+        const sucesso = await encontrarMensagem(pagina, S.MENSAGENS_SUCESSO);
+
+        if (sucesso) {
+            return {
+                confirmada: true,
+                evidencia: `Mensagem de sucesso na tela: ${sucesso}`
+            };
+        }
+
+        const erro = await encontrarMensagem(pagina, S.MENSAGENS_ERRO);
+
+        if (erro) {
+            return {
+                confirmada: false,
+                falhou: true,
+                evidencia: `Mensagem de erro na tela: ${erro}`
+            };
+        }
+
+        await pagina.waitForTimeout(500);
     }
 
     return {
         confirmada: false,
         evidencia:
-            "Nenhuma mensagem explícita de sucesso foi identificada no prazo."
+            "Nenhum sinal conclusivo de sucesso ou erro foi identificado no prazo."
     };
 }
 
@@ -205,5 +289,6 @@ module.exports = {
     avancarEditor,
     preencherLegenda,
     localizarBotaoCompartilhar,
+    monitorarCriacaoPost,
     aguardarConfirmacao
 };

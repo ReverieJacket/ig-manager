@@ -11,7 +11,7 @@ import { dataDeHoje } from "../utils/formatadores";
 /**
  * @returns Estado e ações do formulário. Principais itens:
  *   - campos: `contaId`, `texto`, `agendar`, `data`, `hora`, `arquivo`, `previa`;
- *   - estado: `formularioValido`, `enviando`, `mensagem`, `sucesso`;
+ *   - estado: `formularioValido`, `enviando`, `mensagem`, `sucesso`, `incerto`;
  *   - ações: `escolherArquivo(arquivo)`, `enviar({ agendado })`.
  */
 export function useFormularioPublicacao() {
@@ -28,6 +28,11 @@ export function useFormularioPublicacao() {
   const enviando = ref(false);
   const mensagem = ref("");
   const sucesso = ref(false);
+  /**
+   * `true` quando o Instagram não confirmou a publicação: ela PODE ter
+   * sido feita, então o usuário deve conferir o perfil antes de repetir.
+   */
+  const incerto = ref(false);
 
   const dataMinima = computed(dataDeHoje);
 
@@ -39,9 +44,10 @@ export function useFormularioPublicacao() {
     return agendar.value ? Boolean(data.value && hora.value) : true;
   });
 
-  function definirMensagem(conteudo, ehSucesso) {
+  function definirMensagem(conteudo, ehSucesso, ehIncerto = false) {
     mensagem.value = conteudo;
     sucesso.value = ehSucesso;
+    incerto.value = ehIncerto;
   }
 
   function liberarPrevia() {
@@ -154,7 +160,8 @@ export function useFormularioPublicacao() {
       console.error("Erro ao enviar publicação:", erro);
       definirMensagem(
         erro.message || "Não foi possível processar a publicação.",
-        false
+        false,
+        Boolean(erro.dados?.resultadoIncerto)
       );
     } finally {
       enviando.value = false;
@@ -176,6 +183,7 @@ export function useFormularioPublicacao() {
     enviando,
     mensagem,
     sucesso,
+    incerto,
     escolherArquivo,
     enviar,
   };
