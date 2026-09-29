@@ -1,28 +1,38 @@
+/**
+ * Rotas do frontend.
+ *
+ * `AppLayout` (menu lateral) é a rota pai: as telas são renderizadas
+ * dentro dele, então o layout é montado uma única vez em vez de ser
+ * repetido em cada tela. As views são carregadas sob demanda
+ * (code splitting) para reduzir o tamanho do carregamento inicial.
+ */
 import { createRouter, createWebHistory } from "vue-router";
 
-import Postagens from "../views/Postagens.vue";
-import NovaPublicacao from "../views/NovaPublicacao.vue";
+import AppLayout from "../components/layout/AppLayout.vue";
 
 const routes = [
   {
     path: "/",
-    redirect: "/postagens"
+    component: AppLayout,
+    redirect: "/postagens",
+    children: [
+      {
+        path: "postagens",
+        name: "postagens",
+        component: () => import("../views/PostagensView.vue"),
+        meta: { titulo: "Postagens" },
+      },
+      {
+        path: "criar",
+        name: "criar",
+        component: () => import("../views/NovaPublicacaoView.vue"),
+        meta: { titulo: "Criar" },
+      },
+    ],
   },
-  {
-    path: "/postagens",
-    name: "Postagens",
-    component: Postagens
-  },
-  {
-    path: "/criar",
-    name: "Criar",
-    component: NovaPublicacao
-  }
 ];
 
-const router = createRouter({
+export default createRouter({
   history: createWebHistory(),
-  routes
+  routes,
 });
-
-export default router;
