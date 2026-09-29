@@ -10,43 +10,64 @@
  * Campos sensíveis (cookies, tokens, chaves) são removidos automaticamente
  * caso apareçam em um evento.
  */
+const fs = require("fs");
 const path = require("path");
 const pino = require("pino");
 
 const { config } = require("../config/env");
 
-/** Destinos de saída conforme o ambiente. */
-function criarAlvos() {
+/**
+ * Monta os destinos de saída conforme o ambiente.
+ *
+ * As gravações são SÍNCRONAS e feitas no próprio processo (sem thread
+ * auxiliar). É um pouco menos performático que o modo assíncrono, mas
+ * garante que nada se perca se o processo for encerrado de forma abrupta
+ * (Ctrl+C, `node --watch`, falha) e que erros de gravação apareçam.
+ */
+function criarSaida() {
     const nivel = config.log.nivel;
+    const destinos = [];
 
-    const alvos = [
-        config.emProducao
-            ? { target: "pino/file", level: nivel, options: { destination: 1 } }
-            : {
-                target: "pino-pretty",
-                level: nivel,
-                options: {
-                    colorize: true,
-                    translateTime: "SYS:HH:MM:ss.l",
-                    singleLine: true,
-                    ignore: "pid,hostname,escopo,req,res",
-                    messageFormat: "[{escopo}] {msg}"
-                }
-            }
-    ];
-
-    if (config.log.emArquivo) {
-        alvos.push({
-            target: "pino/file",
+    if (config.emProducao) {
+        destinos.push({
             level: nivel,
-            options: {
-                destination: path.join(config.diretorios.logs, "backend.log"),
-                mkdir: true
-            }
+            stream: pino.destination({ dest: 1, sync: true })
+        });
+    } else {
+        // pino-pretty é dependência de desenvolvimento: só é carregado aqui.
+        const pretty = require("pino-pretty");
+
+        destinos.push({
+            level: nivel,
+            stream: pretty({
+                colorize: true,
+                translateTime: "SYS:HH:MM:ss.l",
+                singleLine: true,
+                ignore: "pid,hostname,escopo,req,res",
+                messageFormat: "[{escopo}] {msg}",
+                sync: true
+            })
         });
     }
 
-    return alvos;
+    if (config.log.emArquivo) {
+        fs.mkdirSync(path.dirname(config.log.arquivo), { recursive: true });
+
+        const arquivo = pino.destination({
+            dest: config.log.arquivo,
+            sync: true
+        });
+
+        arquivo.on("error", (erro) => {
+            console.error(
+                `[logger] Falha ao gravar o arquivo de log: ${erro.message}`
+            );
+        });
+
+        destinos.push({ level: nivel, stream: arquivo });
+    }
+
+    return pino.multistream(destinos);
 }
 
 /** Instância raiz do pino, compartilhada por todos os escopos. */
@@ -67,7 +88,7 @@ const logger = pino(
             censor: "[REMOVIDO]"
         }
     },
-    pino.transport({ targets: criarAlvos() })
+    criarSaida()
 );
 
 /**

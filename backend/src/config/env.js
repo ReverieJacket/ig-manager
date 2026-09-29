@@ -34,7 +34,8 @@ const config = {
         /** debug | info | warn | error | silent. Padrão: debug em desenvolvimento, info em produção. */
         nivel: process.env.LOG_LEVEL || (emProducao ? "info" : "debug"),
         /** Se "true", grava também em storage/logs/backend.log (formato JSON). */
-        emArquivo: process.env.LOG_EM_ARQUIVO === "true"
+        emArquivo: process.env.LOG_EM_ARQUIVO === "true",
+        arquivo: path.join(DIRETORIO_STORAGE, "logs", "backend.log")
     },
 
     /** Origem permitida no CORS. Vazio = qualquer origem (apenas para desenvolvimento). */

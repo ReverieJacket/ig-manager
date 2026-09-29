@@ -26,6 +26,7 @@ process.on("uncaughtException", (erro) => {
 criarApp().listen(config.porta, () => {
     log.info(`Servidor rodando em http://localhost:${config.porta}`, {
         ambiente: config.emProducao ? "producao" : "desenvolvimento",
-        nivelLog: config.log.nivel
+        nivelLog: config.log.nivel,
+        arquivoLog: config.log.emArquivo ? config.log.arquivo : "desativado"
     });
 });
