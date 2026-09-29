@@ -9,6 +9,7 @@ const cors = require("cors");
 
 const { config } = require("./config/env");
 const routes = require("./routes");
+const { requisicoes } = require("./middlewares/requisicoes");
 const { rotaNaoEncontrada, tratarErros } = require("./middlewares/erros");
 
 /**
@@ -19,6 +20,8 @@ const { rotaNaoEncontrada, tratarErros } = require("./middlewares/erros");
 function criarApp() {
     const app = express();
 
+    // Primeiro, para registrar todas as requisições (inclusive as recusadas).
+    app.use(requisicoes);
     app.use(cors(config.corsOrigin ? { origin: config.corsOrigin } : undefined));
     app.use(express.json());
     app.use(express.urlencoded({ extended: true }));

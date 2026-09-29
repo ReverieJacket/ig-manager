@@ -57,6 +57,12 @@ function agendar(publicacao) {
 
     const proximoPasso = Math.min(espera, LIMITE_TIMER_MS);
 
+    if (espera > LIMITE_TIMER_MS) {
+        log.debug(
+            `Publicação ${id} muito distante para um único timer; reagendando em etapas.`
+        );
+    }
+
     const timer = setTimeout(() => {
         timers.delete(id);
 

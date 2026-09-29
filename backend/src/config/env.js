@@ -10,7 +10,8 @@
 const path = require("path");
 
 require("dotenv").config({
-    path: path.resolve(__dirname, "../../.env")
+    path: path.resolve(__dirname, "../../.env"),
+    quiet: true
 });
 
 /** Raiz do pacote backend (pasta que contém `package.json`). */
@@ -22,8 +23,19 @@ const RAIZ_BACKEND = path.resolve(__dirname, "../..");
  */
 const DIRETORIO_STORAGE = path.join(RAIZ_BACKEND, "storage");
 
+const emProducao = process.env.NODE_ENV === "production";
+
 const config = {
+    emProducao,
+
     porta: Number(process.env.PORT || 3000),
+
+    log: {
+        /** debug | info | warn | error | silent. Padrão: debug em desenvolvimento, info em produção. */
+        nivel: process.env.LOG_LEVEL || (emProducao ? "info" : "debug"),
+        /** Se "true", grava também em storage/logs/backend.log (formato JSON). */
+        emArquivo: process.env.LOG_EM_ARQUIVO === "true"
+    },
 
     /** Origem permitida no CORS. Vazio = qualquer origem (apenas para desenvolvimento). */
     corsOrigin: process.env.CORS_ORIGIN || "",

@@ -75,6 +75,16 @@ npm run dev:frontend                   # http://localhost:5173
 
 Erros seguem o formato `{ "sucesso": false, "mensagem": "..." }`.
 
+## Logs
+
+Usa o [pino](https://getpino.io). Em desenvolvimento a saída é colorida e em uma
+linha por evento; com `NODE_ENV=production` é JSON (uma linha por evento).
+
+- `LOG_LEVEL`: `debug` | `info` | `warn` | `error` | `silent`.
+- `LOG_EM_ARQUIVO=true`: grava também em `backend/storage/logs/backend.log`.
+- Cada requisição HTTP é registrada com um `id` (também devolvido no cabeçalho
+  `x-request-id`) para ligar o acesso ao erro correspondente.
+
 ## Limitações conhecidas
 
 - **Agendamentos vivem na memória do processo.** Se o backend reiniciar,

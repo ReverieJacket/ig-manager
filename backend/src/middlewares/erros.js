@@ -8,10 +8,6 @@
 const multer = require("multer");
 
 const { ErroHttp, formatarErro } = require("../lib/erros");
-const { criarLogger } = require("../lib/logger");
-
-const log = criarLogger("HTTP");
-
 /** Responde 404 para qualquer rota não registrada. */
 function rotaNaoEncontrada(req, res) {
     res.status(404).json({
@@ -49,7 +45,9 @@ function tratarErros(erro, req, res, next) {
         });
     }
 
-    log.erro(`${req.method} ${req.originalUrl}`, formatarErro(erro));
+    // O pino-http (middleware de requisições) registra a resposta 500 e
+    // anexa este erro, com pilha e id da requisição, em uma única linha.
+    res.err = erro instanceof Error ? erro : new Error(formatarErro(erro));
 
     res.status(500).json({
         sucesso: false,
