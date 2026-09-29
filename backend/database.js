@@ -1,5 +1,24 @@
-const { Pool } = require("pg");
 require("dotenv").config();
+
+const { Pool } = require("pg");
+
+const obrigatorias = [
+    "DB_HOST",
+    "DB_PORT",
+    "DB_NAME",
+    "DB_USER",
+    "DB_PASSWORD"
+];
+
+const ausentes = obrigatorias.filter(
+    (variavel) => !process.env[variavel]
+);
+
+if (ausentes.length > 0) {
+    throw new Error(
+        `Variáveis ausentes no .env: ${ausentes.join(", ")}`
+    );
+}
 
 console.log("=== CONFIGURAÇÃO DO BANCO ===");
 console.log("Host:", process.env.DB_HOST);
@@ -22,37 +41,40 @@ const pool = new Pool({
 
 pool.on("error", (erro) => {
     console.error("❌ ERRO NO POOL:");
-    console.error(erro);
+    console.error(erro.message);
 });
 
 async function testarConexao() {
     console.log("\n=== TESTANDO CONEXÃO ===");
 
+    let cliente;
+
     try {
         console.log("1. Tentando conectar...");
-        
-        const cliente = await pool.connect();
 
-        console.log("2. Conexão TCP estabelecida!");
+        cliente = await pool.connect();
 
-        const resultado = await cliente.query("SELECT NOW()");
+        console.log("2. Conexão estabelecida!");
 
-        console.log("3. Query executada!");
-        console.log("Horário do banco:", resultado.rows[0].now);
+        const resultado = await cliente.query(
+            "SELECT NOW() AS horario, current_database() AS banco"
+        );
 
-        cliente.release();
+        console.log("3. Consulta executada!");
+        console.log("Horário do banco:", resultado.rows[0].horario);
+        console.log("Banco conectado:", resultado.rows[0].banco);
 
-        console.log("✅ CONEXÃO COM POSTGRESQL FUNCIONANDO!");
+        console.log("✅ CONEXÃO COM SUPABASE FUNCIONANDO!");
 
     } catch (erro) {
-        console.error("\n❌ ERRO DETALHADO:");
+        console.error("\n❌ ERRO NA CONEXÃO:");
         console.error("Nome:", erro.name);
         console.error("Mensagem:", erro.message);
         console.error("Código:", erro.code);
-        console.error("Errno:", erro.errno);
-        console.error("Hostname:", erro.hostname);
-        console.error("Stack:");
-        console.error(erro.stack);
+    } finally {
+        if (cliente) {
+            cliente.release();
+        }
     }
 }
 

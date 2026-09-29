@@ -1,5 +1,7 @@
 .env
 auth.json
+backend/logs/
+backend/uploads/
 
 # Playwright
 node_modules/
