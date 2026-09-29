@@ -1,12 +1,26 @@
-.env
-auth.json
-backend/logs/
-backend/uploads/
-
-# Playwright
+# Dependências e builds
 node_modules/
-/test-results/
-/playwright-report/
-/blob-report/
-/playwright/.cache/
-/playwright/.auth/
+dist/
+
+# Segredos e configuração local
+.env
+.env.*
+!.env.example
+
+# Dados gerados em tempo de execução (uploads, logs, sessão do Instagram)
+backend/storage/
+
+# Sessões e perfis de navegador (contêm cookies: NUNCA versionar)
+auth.json
+*-auth.json
+perfil-instagram/
+
+# Artefatos do Playwright
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# Sistema operacional / editores
+.DS_Store
+Thumbs.db
