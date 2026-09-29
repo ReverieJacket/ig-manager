@@ -1,0 +1,7 @@
+{
+  "data": "2026-09-28T23:34:08.025Z",
+  "etapa": "Iniciando navegador",
+  "erro": "browser.newContext: Error setting storage state:\nProtocol error (Target.createTarget): Failed to open a new tab",
+  "url": null,
+  "screenshot": null
+}

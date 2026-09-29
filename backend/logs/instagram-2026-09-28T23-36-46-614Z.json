@@ -1,0 +1,7 @@
+{
+  "data": "2026-09-28T23:36:46.740Z",
+  "etapa": "Selecionando opção de publicação",
+  "erro": "locator.waitFor: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByText('Publicação', { exact: true }).first() to be visible\u001b[22m\n",
+  "url": "https://www.instagram.com/",
+  "screenshot": "C:\\Users\\Aluno\\Documents\\GitHub\\ig-manager\\backend\\logs\\instagram-2026-09-28T23-36-46-614Z.png"
+}

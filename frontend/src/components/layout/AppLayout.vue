@@ -16,6 +16,11 @@
           <span>Postagens</span>
         </router-link>
 
+        <router-link to="/contas" class="nav-item" active-class="active">
+          <span class="nav-icon">◎</span>
+          <span>Contas</span>
+        </router-link>
+
         <router-link to="/criar" class="nav-item" active-class="active">
           <span class="nav-icon plus">+</span>
           <span>Criar</span>
