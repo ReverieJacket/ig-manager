@@ -2,8 +2,8 @@
  * Sessão autenticada do Instagram.
  *
  * O login é feito manualmente uma vez (`npm run login:instagram`), que
- * grava o estado do navegador em `storage/instagram-auth.json`. Aqui esse
- * estado é reaplicado a cada execução da automação.
+ * grava o estado do navegador em arquivo separado por conta. Cada conta
+ * deve possuir sua própria sessão autenticada.
  */
 const fs = require("fs");
 
@@ -17,13 +17,27 @@ const { CAMPOS_LOGIN, URL_VERIFICACAO } = require("./seletores");
  * @param {import("playwright").BrowserContext} contexto
  * @throws {Error} Se o arquivo de sessão não existir ou estiver corrompido.
  */
-async function restaurarSessao(contexto) {
-    const arquivo = config.instagram.arquivoSessao;
+function obterArquivoSessao(contaId) {
+    const id = Number(contaId);
+    if (!Number.isSafeInteger(id) || id <= 0) {
+        throw new Error("Identificador de conta inválido para restaurar a sessão.");
+    }
+
+    const path = require("path");
+    return path.join(
+        config.diretorios.storage,
+        "instagram-sessoes",
+        `conta-${id}.json`
+    );
+}
+
+async function restaurarSessao(contexto, contaId) {
+    const arquivo = obterArquivoSessao(contaId);
 
     if (!fs.existsSync(arquivo)) {
         throw new Error(
             `Sessão não encontrada em ${arquivo}. ` +
-            "Execute `npm run login:instagram` para gerá-la."
+            "Conecte esta conta pelo fluxo de autenticação para gerar sua sessão."
         );
     }
 
@@ -85,4 +99,4 @@ async function verificarLogin(pagina) {
     log.info("Nenhum formulário de login identificado.");
 }
 
-module.exports = { restaurarSessao, verificarLogin };
+module.exports = { restaurarSessao, verificarLogin, obterArquivoSessao };

@@ -92,12 +92,12 @@ async function executarPublicacao(publicacao) {
             username: conta.username
         });
 
-        // A automação usa a única sessão salva; ela não troca de conta
-        // com base no username (limitação conhecida — ver README).
+        // Cada conta utiliza um arquivo de sessão isolado, identificado pelo ID.
         const resultado = await publicarNoInstagram(
             caminhoImagem,
             publicacao.texto,
-            publicacao.mimetype || undefined
+            publicacao.mimetype || undefined,
+            Number(conta.id)
         );
 
         log.info(`Resultado da automação da publicação ${id}`, resultado);

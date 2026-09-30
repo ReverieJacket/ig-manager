@@ -31,16 +31,19 @@ const { URL_INSTAGRAM, TEMPO } = require("./seletores");
  * @param {string} caminhoImagem - Caminho absoluto da imagem no disco.
  * @param {string} legenda - Texto da publicação.
  * @param {string} [mimetype] - Tipo da imagem (apenas para log).
+ * @param {number} contaId - ID da conta cuja sessão será utilizada.
  * @returns {Promise<ResultadoPublicacao>}
  */
-async function publicarNoInstagram(caminhoImagem, legenda, mimetype) {
+async function publicarNoInstagram(caminhoImagem, legenda, mimetype, contaId) {
     let navegador;
     let contexto;
     let pagina;
     let compartilhou = false;
 
     try {
-        exigirVariaveis(["INSTAGRAM_USERNAME"]);
+        if (!Number.isSafeInteger(Number(contaId)) || Number(contaId) <= 0) {
+            throw new Error("Informe o ID da conta do Instagram para publicar.");
+        }
 
         if (!caminhoImagem || typeof caminhoImagem !== "string") {
             throw new Error("Caminho da imagem não informado.");
@@ -63,7 +66,7 @@ async function publicarNoInstagram(caminhoImagem, legenda, mimetype) {
             viewport: { width: 1365, height: 900 }
         });
 
-        await restaurarSessao(contexto);
+        await restaurarSessao(contexto, Number(contaId));
 
         pagina = await contexto.newPage();
         pagina.setDefaultTimeout(TEMPO.padrao);
