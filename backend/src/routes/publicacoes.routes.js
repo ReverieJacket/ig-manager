@@ -5,6 +5,9 @@
  * POST /publicacoes     - cria publicação imediata ou agendada
  *                         (multipart/form-data: imagem, texto, dataHora, conta_id).
  * GET  /publicacoes/:id - consulta uma publicação.
+ * GET  /publicacoes/:id/comentarios - comentários (?pagina, ?limite, ?incluirRemovidos).
+ * POST /publicacoes/:id/comentarios/coletar - coleta agora no Instagram (demora).
+ * PATCH /publicacoes/:id/instagram - define o código/URL do post no Instagram.
  *
  * As rotas apenas traduzem HTTP <-> serviço: validam a entrada e
  * escolhem o status da resposta.
@@ -14,9 +17,12 @@ const { Router } = require("express");
 const { uploadImagem } = require("../middlewares/upload");
 const {
     validarId,
-    validarNovaPublicacao
+    validarNovaPublicacao,
+    validarPaginacao,
+    validarCodigoPost
 } = require("../validators/publicacoes.validator");
 const publicacoesService = require("../services/publicacoes.service");
+const comentariosService = require("../services/comentarios.service");
 
 const router = Router();
 
@@ -61,6 +67,32 @@ router.get("/:id", async (req, res) => {
     const id = validarId(req.params.id, "ID de publicação inválido.");
 
     res.json(await publicacoesService.buscarPublicacao(id));
+});
+
+router.get("/:id/comentarios", async (req, res) => {
+    const id = validarId(req.params.id, "ID de publicação inválido.");
+
+    res.json(
+        await comentariosService.listarComentarios(id, validarPaginacao(req.query))
+    );
+});
+
+router.post("/:id/comentarios/coletar", async (req, res) => {
+    const id = validarId(req.params.id, "ID de publicação inválido.");
+
+    res.json({
+        sucesso: true,
+        ...(await comentariosService.coletarComentarios(id))
+    });
+});
+
+router.patch("/:id/instagram", async (req, res) => {
+    const id = validarId(req.params.id, "ID de publicação inválido.");
+    const codigo = validarCodigoPost(req.body);
+
+    await comentariosService.definirCodigoPost(id, codigo);
+
+    res.json({ sucesso: true, ig_codigo: codigo });
 });
 
 module.exports = router;

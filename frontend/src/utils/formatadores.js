@@ -56,3 +56,41 @@ export function dataDeHoje() {
 
   return `${agora.getFullYear()}-${mes}-${dia}`;
 }
+
+/**
+ * Descreve quanto tempo se passou desde uma data, em português
+ * (ex.: "há 5 minutos", "ontem"). Datas futuras/inválidas caem no formato
+ * completo de `formatarData`.
+ *
+ * @param {string|null|undefined} data - Data ISO.
+ * @returns {string}
+ */
+export function formatarDataRelativa(data) {
+  if (!data) return "—";
+
+  const instante = new Date(data).getTime();
+
+  if (Number.isNaN(instante)) return "—";
+
+  const segundos = Math.round((instante - Date.now()) / 1000);
+
+  // Tolera pequena diferença de relógio; adiante disso mostra a data.
+  if (segundos > 60) return formatarData(data);
+
+  const formato = new Intl.RelativeTimeFormat("pt-BR", { numeric: "auto" });
+  const unidades = [
+    ["year", 31536000],
+    ["month", 2592000],
+    ["day", 86400],
+    ["hour", 3600],
+    ["minute", 60],
+  ];
+
+  for (const [unidade, tamanho] of unidades) {
+    if (Math.abs(segundos) >= tamanho) {
+      return formato.format(Math.round(segundos / tamanho), unidade);
+    }
+  }
+
+  return "agora há pouco";
+}

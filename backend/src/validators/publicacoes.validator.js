@@ -5,6 +5,7 @@
  * tipados, ou lança `ErroHttp` 400 com uma mensagem clara.
  */
 const { ErroHttp } = require("../lib/erros");
+const { FORMATO_CODIGO_POST } = require("../automacao/instagram/seletores");
 
 /**
  * Converte um identificador recebido (rota ou formulário) em inteiro positivo.
@@ -62,4 +63,55 @@ function validarNovaPublicacao(corpo, arquivo) {
     return { arquivo, texto, contaId, dataHora };
 }
 
-module.exports = { validarId, validarNovaPublicacao };
+/**
+ * Valida a paginação de uma listagem (`?pagina=1&limite=50`).
+ *
+ * @param {object} query - `req.query`.
+ * @returns {{pagina: number, limite: number, incluirRemovidos: boolean}}
+ * @throws {ErroHttp} 400 para valores fora do intervalo.
+ */
+function validarPaginacao(query) {
+    const pagina = query.pagina === undefined ? 1 : Number(query.pagina);
+    const limite = query.limite === undefined ? 50 : Number(query.limite);
+
+    if (!Number.isInteger(pagina) || pagina < 1) {
+        throw new ErroHttp(400, "Página inválida.");
+    }
+
+    if (!Number.isInteger(limite) || limite < 1 || limite > 100) {
+        throw new ErroHttp(400, "O limite deve estar entre 1 e 100.");
+    }
+
+    return {
+        pagina,
+        limite,
+        incluirRemovidos: query.incluirRemovidos === "true"
+    };
+}
+
+/**
+ * Extrai o código curto de um post a partir do código em si ou de uma URL
+ * (`https://www.instagram.com/p/<codigo>/`, também `/reel/<codigo>/`).
+ *
+ * @param {object} corpo - `req.body` com `codigo` ou `url`.
+ * @returns {string} Código validado.
+ * @throws {ErroHttp} 400 se não for possível obter um código válido.
+ */
+function validarCodigoPost(corpo) {
+    const bruto = String(corpo?.codigo || corpo?.url || "").trim();
+    const daUrl = bruto.match(/instagram\.com\/(?:[^/]+\/)?(?:p|reel)\/([^/?#]+)/i);
+    const codigo = daUrl ? daUrl[1] : bruto;
+
+    if (!FORMATO_CODIGO_POST.test(codigo)) {
+        throw new ErroHttp(400, "Informe o código ou a URL do post no Instagram.");
+    }
+
+    return codigo;
+}
+
+module.exports = {
+    validarId,
+    validarNovaPublicacao,
+    validarPaginacao,
+    validarCodigoPost
+};

@@ -7,7 +7,12 @@
 const { supabase } = require("../lib/supabase");
 
 const TABELA = "publicacoes";
-const COLUNAS = "id, conta_id, imagem, texto, data_hora, status, erro";
+/**
+ * `*` (e não uma lista) para que as colunas criadas em migrações
+ * (`ig_codigo`, `comentarios_total`...) apareçam automaticamente e a API
+ * não quebre caso a migração ainda não tenha sido executada.
+ */
+const COLUNAS = "*";
 
 /**
  * Ciclo de vida de uma publicação.

@@ -56,8 +56,12 @@ export function usePublicacoes() {
     });
   });
 
-  async function carregar() {
-    carregando.value = true;
+  /**
+   * Busca as publicações. Com `silencioso`, atualiza os dados sem mostrar
+   * o estado "carregando" (evita a tabela piscar ao atualizar contadores).
+   */
+  async function carregar({ silencioso = false } = {}) {
+    if (!silencioso) carregando.value = true;
     erro.value = "";
 
     try {
