@@ -123,7 +123,7 @@
           <p v-if="mensagem" class="mensagem-form" role="status">{{ mensagem }}</p>
           <footer class="modal-acoes">
             <button class="botao botao--secundario" type="button" @click="fecharModal">Cancelar</button>
-            <button class="botao botao--primario" type="submit">{{ modalTipo === 'link' ? 'Gerar link' : 'Cadastrar conta' }}</button>
+            <button class="botao botao--primario" type="submit" :disabled="enviando">{{ enviando ? "Salvando..." : (modalTipo === 'link' ? 'Gerar link' : 'Cadastrar conta') }}</button>
           </footer>
         </form>
       </section>
@@ -134,12 +134,14 @@
 <script setup>
 import { computed, reactive, ref } from 'vue';
 import { useContas } from '../composables/useContas';
+import { cadastrarConta } from '../api/contas';
 
 const { contas, carregando, erro, carregar } = useContas();
 const busca = ref('');
 const modalAberto = ref(false);
 const modalTipo = ref('manual');
 const mensagem = ref('');
+const enviando = ref(false);
 const form = reactive({ cliente: '', nome: '', username: '', validade: '24' });
 
 const filtradas = computed(() => {
@@ -162,12 +164,28 @@ function fecharModal() {
   mensagem.value = '';
 }
 
-function enviarFormulario() {
-  // A interface e validação inicial estão prontas; a persistência depende
-  // dos endpoints e da tabela de convites, ainda não implementados.
-  mensagem.value = modalTipo.value === 'link'
-    ? 'Formulário visual pronto. A geração segura do link será conectada ao backend na próxima etapa.'
-    : 'Formulário visual pronto. O cadastro será conectado à API na próxima etapa.';
+async function enviarFormulario() {
+  mensagem.value = '';
+
+  if (modalTipo.value === 'link') {
+    mensagem.value = 'A geração de links será implementada em uma etapa própria. Por enquanto, utilize o cadastro manual.';
+    return;
+  }
+
+  enviando.value = true;
+  try {
+    await cadastrarConta({
+      cliente: form.cliente,
+      nome: form.nome,
+      username: form.username,
+    });
+    await carregar();
+    fecharModal();
+  } catch (erroApi) {
+    mensagem.value = erroApi.message || 'Não foi possível cadastrar a conta.';
+  } finally {
+    enviando.value = false;
+  }
 }
 
 function iniciais(valor) {
