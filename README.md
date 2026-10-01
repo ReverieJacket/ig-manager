@@ -82,7 +82,8 @@ Supabase; o ícone ◌ na tela **Postagens** abre um modal com a lista.
 
 **Configuração (uma vez):**
 
-1. Execute `backend/db/migrations/001_comentarios.sql` no SQL Editor do Supabase.
+1. Execute no SQL Editor do Supabase, nesta ordem: `backend/db/migrations/001_comentarios.sql`
+   e `backend/db/migrations/002_curtidas.sql`.
 2. Gere a sessão da conta: `npm run login:instagram -- --conta <id>`.
 
 **Como funciona:**
@@ -96,6 +97,11 @@ Supabase; o ícone ◌ na tela **Postagens** abre um modal com a lista.
   `removido_em`, e só quando a coleta foi completa e não veio vazia.
 - `GET /publicacoes/:id/comentarios?pagina=1&limite=30&incluirRemovidos=false`.
 - Publicar e coletar usam uma fila: um navegador por vez.
+- **Curtidas:** lidas na mesma visita ao post, sem abrir outro navegador. O valor
+  atual fica em `publicacoes.curtidas` e cada coleta gera uma linha em
+  `curtidas_historico`. Números abreviados pelo Instagram ("1,2 mil") ficam
+  marcados como aproximados (`~`). Se o autor ocultar o contador, o valor
+  anterior é mantido: "sem dado" não é "zero curtidas".
 
 ## Logs
 

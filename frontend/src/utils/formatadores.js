@@ -94,3 +94,18 @@ export function formatarDataRelativa(data) {
 
   return "agora há pouco";
 }
+
+/**
+ * Formata a quantidade de curtidas. Ausente (nunca lida ou oculta) aparece
+ * como "—", e NÃO como 0, pois "sem dado" não é "zero curtidas". Valores
+ * abreviados pelo Instagram ("1,2 mil") levam "~" na frente.
+ *
+ * @param {number|null|undefined} valor
+ * @param {boolean} [aproximado=false]
+ * @returns {string}
+ */
+export function formatarCurtidas(valor, aproximado = false) {
+  if (valor === null || valor === undefined) return "—";
+
+  return `${aproximado ? "~" : ""}${Number(valor).toLocaleString("pt-BR")}`;
+}

@@ -5,6 +5,7 @@
 import { computed, ref, watch } from "vue";
 
 import { coletarComentarios, listarComentarios } from "../api/comentarios";
+import { formatarCurtidas } from "../utils/formatadores";
 
 const POR_PAGINA = 30;
 
@@ -13,6 +14,7 @@ const POR_PAGINA = 30;
  *   exibida; ao mudar, a lista é reiniciada. `null` = nada a mostrar.
  * @returns Estado reativo e ações:
  *   - `itens`, `total`, `atualizadoEm`: dados da lista;
+ *   - `curtidasColetadas`: curtidas lidas na última coleta (ou `null`);
  *   - `carregando`, `erro`: estado do carregamento;
  *   - `temMais`: há mais páginas a buscar;
  *   - `incluirRemovidos`: filtro editado pela tela;
@@ -27,6 +29,9 @@ export function useComentarios(publicacaoId) {
   const carregando = ref(false);
   const erro = ref("");
   const incluirRemovidos = ref(false);
+
+  /** Curtidas lidas na última coleta desta sessão: `{ valor, aproximado }` ou `null`. */
+  const curtidasColetadas = ref(null);
 
   const coletando = ref(false);
   /** `{ tipo: "sucesso" | "aviso" | "erro", texto }` ou `null`. */
@@ -78,6 +83,7 @@ export function useComentarios(publicacaoId) {
     pagina.value = 1;
     atualizadoEm.value = null;
     resumoColeta.value = null;
+    curtidasColetadas.value = null;
     erro.value = "";
 
     return carregarPagina(1);
@@ -105,13 +111,25 @@ export function useComentarios(publicacaoId) {
       if (r.reaparecidos) partes.push(`${r.reaparecidos} reapareceu(ram)`);
       if (r.removidos) partes.push(`${r.removidos} removido(s)`);
 
+      if (r.curtidas !== null && r.curtidas !== undefined) {
+        curtidasColetadas.value = {
+          valor: r.curtidas,
+          aproximado: r.curtidas_aproximado,
+        };
+      }
+
+      const curtidas =
+        curtidasColetadas.value && r.curtidas !== null
+          ? ` ♡ ${formatarCurtidas(r.curtidas, r.curtidas_aproximado)} curtidas.`
+          : " Contador de curtidas não encontrado.";
+
       resumoColeta.value = r.completa
-        ? { tipo: "sucesso", texto: `Atualizado: ${partes.join(", ")}.` }
+        ? { tipo: "sucesso", texto: `Atualizado: ${partes.join(", ")}.${curtidas}` }
         : {
             tipo: "aviso",
             texto:
               `Coleta parcial (${partes.join(", ")}): nem todos os comentários ` +
-              "foram carregados, então nenhuma remoção foi registrada.",
+              `foram carregados, então nenhuma remoção foi registrada.${curtidas}`,
           };
 
       await carregarPagina(1);
@@ -138,6 +156,7 @@ export function useComentarios(publicacaoId) {
     itens,
     total,
     atualizadoEm,
+    curtidasColetadas,
     carregando,
     erro,
     temMais,

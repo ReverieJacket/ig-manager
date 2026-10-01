@@ -10,6 +10,7 @@ const { log, salvarScreenshot, clicarVisivel } = require("./helpers");
 const { abrirSessao } = require("./navegador");
 const { verificarLogin } = require("./sessao");
 const { extrairComentarios } = require("./comentarios");
+const { extrairCurtidas } = require("./curtidas");
 const {
     URL_INSTAGRAM,
     TEMPO,
@@ -79,6 +80,8 @@ async function carregarTodosComentarios(pagina) {
  * @property {Array<object>} comentarios - Comentários (sem a legenda), no
  *   formato de `extrairComentarios`.
  * @property {boolean} completa - A lista foi carregada até o fim.
+ * @property {{valor: number, aproximado: boolean}|null} curtidas - Curtidas
+ *   lidas na mesma visita; `null` se o contador não estava visível.
  */
 
 /**
@@ -111,17 +114,21 @@ async function coletarComentariosDoPost(contaId, codigoPost) {
         const { completa, rodadas } = await carregarTodosComentarios(pagina);
         const todos = await extrairComentarios(pagina);
 
+        // Mesma visita ao post: o contador de curtidas não custa outra abertura.
+        const curtidas = await extrairCurtidas(pagina);
+
         // A legenda aparece na lista, mas não é um comentário.
         const comentarios = todos.filter((c) => c.tipo === "comentario" && c.id);
 
         log.info("Coleta de comentários concluída", {
             codigoPost,
             total: comentarios.length,
+            curtidas: curtidas?.valor ?? null,
             completa,
             rodadas
         });
 
-        return { comentarios, completa };
+        return { comentarios, completa, curtidas };
     } catch (erro) {
         await salvarScreenshot(pagina, "falha-coleta-comentarios");
         throw erro;

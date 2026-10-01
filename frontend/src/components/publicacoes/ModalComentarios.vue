@@ -36,7 +36,8 @@
           {{ total === 1 ? "comentário" : "comentários" }}
           <span class="atualizado">
             ·
-            <template v-if="atualizadoEm" >
+            <template v-if="curtidasTexto">♡ {{ curtidasTexto }} curtidas ·</template>
+            <template v-if="atualizadoEm">
               atualizado {{ formatarDataRelativa(atualizadoEm) }}
             </template>
             <template v-else>ainda não coletado</template>
@@ -143,7 +144,11 @@
 import { computed, nextTick, ref, watch } from "vue";
 
 import { useComentarios } from "../../composables/useComentarios";
-import { formatarData, formatarDataRelativa } from "../../utils/formatadores";
+import {
+  formatarCurtidas,
+  formatarData,
+  formatarDataRelativa,
+} from "../../utils/formatadores";
 
 /**
  * @property {object|null} publicacao - Publicação a exibir; `null` mantém o
@@ -166,6 +171,7 @@ const {
   itens,
   total,
   atualizadoEm,
+  curtidasColetadas,
   carregando,
   erro,
   temMais,
@@ -175,6 +181,25 @@ const {
   carregarMais,
   coletar,
 } = useComentarios(publicacaoId);
+
+/**
+ * Curtidas a exibir: a da coleta feita agora, ou a que já veio na lista de
+ * publicações. `null` (ainda sem leitura) esconde o trecho.
+ */
+const curtidasTexto = computed(() => {
+  if (curtidasColetadas.value) {
+    return formatarCurtidas(
+      curtidasColetadas.value.valor,
+      curtidasColetadas.value.aproximado
+    );
+  }
+
+  const p = props.publicacao;
+
+  return p && p.curtidas !== null && p.curtidas !== undefined
+    ? formatarCurtidas(p.curtidas, p.curtidas_aproximado)
+    : null;
+});
 
 // Abre/fecha o <dialog> conforme a publicação informada.
 watch(

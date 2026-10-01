@@ -9,11 +9,62 @@ const { filaAutomacao } = require("../lib/fila");
 const { criarLogger } = require("../lib/logger");
 const { coletarComentariosDoPost } = require("../automacao/instagram/coletar");
 const comentariosRepository = require("../repositories/comentarios.repository");
+const curtidasRepository = require("../repositories/curtidas.repository");
 const publicacoesRepository = require("../repositories/publicacoes.repository");
 const { planejarSincronizacao } = require("./comentarios.sincronizacao");
 
 const { STATUS } = publicacoesRepository;
 const log = criarLogger("Comentarios");
+
+/**
+ * Guarda as curtidas lidas na coleta: valor atual na publicação e uma linha
+ * no histórico. É "melhor esforço": se a migração 002 ainda não foi
+ * executada ou a gravação falhar, apenas avisa, pois os comentários já
+ * foram sincronizados e não devem ser perdidos por causa disso.
+ *
+ * Contador não encontrado (curtidas ocultas pelo autor) NÃO zera o valor
+ * anterior: "sem dado" é diferente de "zero curtidas".
+ *
+ * @param {object} publicacao
+ * @param {{valor: number, aproximado: boolean}|null} curtidas
+ * @param {string} agora - Instante ISO da coleta.
+ * @returns {Promise<{valor: number, aproximado: boolean}|null>} O que foi
+ *   gravado, ou `null` se não houve leitura.
+ */
+async function registrarCurtidas(publicacao, curtidas, agora) {
+    if (!curtidas) {
+        log.aviso(
+            `Publicação ${publicacao.id}: contador de curtidas não encontrado ` +
+            "(talvez oculto pelo autor); o valor anterior foi mantido."
+        );
+        return null;
+    }
+
+    try {
+        await publicacoesRepository.atualizar(publicacao.id, {
+            curtidas: curtidas.valor,
+            curtidas_aproximado: curtidas.aproximado,
+            curtidas_atualizado_em: agora
+        });
+
+        await curtidasRepository.registrarHistorico({
+            publicacaoId: publicacao.id,
+            contaId: publicacao.conta_id,
+            curtidas: curtidas.valor,
+            aproximado: curtidas.aproximado,
+            coletadoEm: agora
+        });
+
+        return curtidas;
+    } catch (erro) {
+        log.aviso(
+            `Publicação ${publicacao.id}: não foi possível guardar as curtidas ` +
+            "(a migração 002_curtidas.sql foi executada?)",
+            formatarErro(erro)
+        );
+        return null;
+    }
+}
 
 /**
  * Lista os comentários de uma publicação (paginado).
@@ -49,7 +100,8 @@ async function listarComentarios(publicacaoId, { limite, pagina, incluirRemovido
  *
  * @param {number} publicacaoId
  * @returns {Promise<{novos: number, reaparecidos: number, removidos: number,
- *   total: number, completa: boolean}>}
+ *   total: number, completa: boolean, curtidas: (number|null),
+ *   curtidas_aproximado: boolean}>}
  * @throws {ErroHttp} 404 (publicação inexistente), 409 (publicação sem
  *   código do post ou ainda não publicada), 502 (falha ao acessar o Instagram).
  */
@@ -106,12 +158,15 @@ async function coletarComentarios(publicacaoId) {
         comentarios_atualizado_em: agora
     });
 
+    const curtidas = await registrarCurtidas(publicacao, coleta.curtidas, agora);
+
     log.info(`Comentários da publicação ${publicacaoId} sincronizados`, {
         novos: plano.novos,
         reaparecidos: plano.reaparecidos,
         removidos: plano.removidos,
         total,
         completa: coleta.completa,
+        curtidas: curtidas?.valor ?? null,
         removocoesIgnoradas: plano.removocoesIgnoradas
     });
 
@@ -120,7 +175,9 @@ async function coletarComentarios(publicacaoId) {
         reaparecidos: plano.reaparecidos,
         removidos: plano.removidos,
         total,
-        completa: coleta.completa
+        completa: coleta.completa,
+        curtidas: curtidas?.valor ?? null,
+        curtidas_aproximado: curtidas?.aproximado ?? false
     };
 }
 
