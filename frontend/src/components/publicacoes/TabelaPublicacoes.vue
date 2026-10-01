@@ -39,11 +39,25 @@
 
           <td>{{ formatarData(post.data_hora) }}</td>
 
-          <!-- Campos ainda não fornecidos pelo backend (exibem 0/—). -->
+          <!-- Curtidas ainda não são fornecidas pelo backend (exibem 0). -->
           <td>
             <div class="engagement">
               <span>♡ {{ post.curtidas ?? 0 }}</span>
-              <span>◌ {{ post.comentarios ?? 0 }}</span>
+
+              <button
+                type="button"
+                class="comentarios"
+                :disabled="normalizarStatus(post.status) !== STATUS.PUBLICADA"
+                :aria-label="`Ver comentários (${post.comentarios_total ?? 0})`"
+                :title="
+                  normalizarStatus(post.status) === STATUS.PUBLICADA
+                    ? 'Ver comentários'
+                    : 'Disponível após a publicação'
+                "
+                @click="emit('comentarios', post)"
+              >
+                ◌ {{ post.comentarios_total ?? 0 }}
+              </button>
             </div>
           </td>
 
@@ -59,6 +73,7 @@
 </template>
 
 <script setup>
+import { STATUS } from "../../constants/publicacoes";
 import {
   formatarData,
   formatarStatus,
@@ -68,10 +83,14 @@ import {
 /**
  * @property {Array<object>} publicacoes - Publicações já filtradas, no
  *   formato devolvido por `api/publicacoes.js`.
+ * @event comentarios - O usuário clicou no ícone de comentários; envia a
+ *   publicação da linha.
  */
 defineProps({
   publicacoes: { type: Array, required: true },
 });
+
+const emit = defineEmits(["comentarios"]);
 </script>
 
 <style scoped>
@@ -156,6 +175,25 @@ tr:last-child td {
   gap: 9px;
   color: #666;
   font-size: 12px;
+}
+
+.comentarios {
+  padding: 2px 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.comentarios:hover:not(:disabled) {
+  background: #eeeeee;
+  color: var(--cor-texto);
+}
+
+.comentarios:disabled {
+  cursor: default;
 }
 
 .action-button {

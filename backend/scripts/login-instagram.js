@@ -1,20 +1,48 @@
 /**
- * Script de login manual no Instagram: `npm run login:instagram -w backend`.
+ * Script de login manual no Instagram, UMA sessão por conta:
  *
- * Abre um navegador visível, espera você entrar na conta (inclusive
+ *     npm run login:instagram -- --conta 1
+ *
+ * `--conta` é o `id` da conta na tabela `contas_instagram`. O script abre
+ * um navegador visível, espera você entrar NAQUELA conta (inclusive
  * CAPTCHA/verificação) e salva o estado da sessão em
- * `storage/instagram-auth.json`, que a automação reutiliza.
+ * `storage/instagram-sessoes/conta-<id>.json`, que a automação reutiliza.
  *
- * Substitui os antigos `gerar-auth.js` e `login-instagram.js`, que faziam
- * a mesma coisa. Mantenha o arquivo de sessão privado: quem o possui
- * acessa a conta.
+ * Mantenha o arquivo de sessão privado: quem o possui acessa a conta.
  */
 const fs = require("fs");
 const path = require("path");
 const readline = require("readline");
 const { chromium } = require("playwright");
 
-const { config } = require("../src/config/env");
+const { obterArquivoSessao } = require("../src/automacao/instagram/sessao");
+
+/**
+ * Lê o valor de `--conta` (ou `--conta=<id>`) da linha de comando.
+ *
+ * @returns {number} Id da conta.
+ * @throws {Error} Se ausente ou inválido.
+ */
+function lerContaDosArgumentos() {
+    const args = process.argv.slice(2);
+    const indice = args.findIndex((a) => a === "--conta" || a.startsWith("--conta="));
+    const bruto = indice === -1
+        ? undefined
+        : args[indice].includes("=") ? args[indice].split("=")[1] : args[indice + 1];
+    const id = Number(bruto);
+
+    if (!Number.isSafeInteger(id) || id <= 0) {
+        const erro = new Error(
+            "Informe a conta: npm run login:instagram -- --conta <id> " +
+            "(o id está na tabela contas_instagram)."
+        );
+
+        erro.uso = true;
+        throw erro;
+    }
+
+    return id;
+}
 
 /**
  * Exibe uma pergunta e espera o usuário pressionar ENTER.
@@ -37,10 +65,13 @@ function aguardarEnter(mensagem) {
 }
 
 async function loginInstagram() {
-    const arquivo = config.instagram.arquivoSessao;
     let navegador;
 
     try {
+        const contaId = lerContaDosArgumentos();
+        const arquivo = obterArquivoSessao(contaId);
+
+        console.log(`Conectando a conta ${contaId}. Entre SOMENTE nela.`);
         navegador = await chromium.launch({ headless: false });
 
         const contexto = await navegador.newContext({
@@ -83,7 +114,8 @@ async function loginInstagram() {
         console.log(arquivo);
         console.log("Mantenha esse arquivo privado e nunca o envie ao GitHub.");
     } catch (erro) {
-        console.error("\nErro ao gerar a sessão:", erro);
+        // Erro de uso (argumento ausente): só a mensagem, sem pilha.
+        console.error("\nErro ao gerar a sessão:", erro.uso ? erro.message : erro);
         process.exitCode = 1;
     } finally {
         if (navegador) await navegador.close().catch(() => {});

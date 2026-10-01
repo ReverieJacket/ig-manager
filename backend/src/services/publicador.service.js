@@ -11,6 +11,7 @@ const path = require("path");
 const { config } = require("../config/env");
 const { criarLogger } = require("../lib/logger");
 const { formatarErro } = require("../lib/erros");
+const { filaAutomacao } = require("../lib/fila");
 const { publicarNoInstagram } = require("../automacao/instagram/publicar");
 const publicacoesRepository = require("../repositories/publicacoes.repository");
 const contasService = require("./contas.service");
@@ -44,6 +45,31 @@ async function registrarErro(id, mensagem) {
             `Não foi possível atualizar o status da publicação ${id}`,
             formatarErro(erroBanco)
         );
+    }
+}
+
+/**
+ * Guarda o código do post no Instagram, necessário para coletar os
+ * comentários depois. É "melhor esforço": se a coluna ainda não existir
+ * (migração pendente) ou a gravação falhar, apenas avisa; a publicação já
+ * foi concluída e não pode virar erro por causa disso.
+ *
+ * @param {number} id
+ * @param {string|null|undefined} codigo
+ */
+async function guardarCodigoPost(id, codigo) {
+    if (!codigo) {
+        log.aviso(
+            `Publicação ${id}: o Instagram não informou o código do post; ` +
+            "os comentários só poderão ser coletados se o código for definido manualmente."
+        );
+        return;
+    }
+
+    try {
+        await publicacoesRepository.atualizar(id, { ig_codigo: codigo });
+    } catch (erro) {
+        log.aviso(`Publicação ${id}: não foi possível guardar o código do post`, formatarErro(erro));
     }
 }
 
@@ -93,11 +119,15 @@ async function executarPublicacao(publicacao) {
         });
 
         // Cada conta utiliza um arquivo de sessão isolado, identificado pelo ID.
-        const resultado = await publicarNoInstagram(
-            caminhoImagem,
-            publicacao.texto,
-            publicacao.mimetype || undefined,
-            Number(conta.id)
+        // Um navegador por vez: espera se outra automação estiver rodando.
+        const resultado = await filaAutomacao.executar(() =>
+            publicarNoInstagram(
+                caminhoImagem,
+                publicacao.texto,
+                publicacao.mimetype || undefined,
+                Number(conta.id),
+                conta.username
+            )
         );
 
         log.info(`Resultado da automação da publicação ${id}`, resultado);
@@ -107,6 +137,8 @@ async function executarPublicacao(publicacao) {
                 status: STATUS.PUBLICADA,
                 erro: null
             });
+
+            await guardarCodigoPost(id, resultado.codigoPost);
 
             log.info(`Publicação ${id} concluída.`);
             return { sucesso: true, id };

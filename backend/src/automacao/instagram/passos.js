@@ -3,7 +3,6 @@
  *
  * Cada função faz uma única etapa e é orquestrada por `publicar.js`.
  */
-const { config } = require("../../config/env");
 const { log, salvarScreenshot, clicarVisivel } = require("./helpers");
 const { verificarLogin } = require("./sessao");
 const S = require("./seletores");
@@ -12,12 +11,13 @@ const S = require("./seletores");
  * Abre o perfil e aciona o botão "Criar" para iniciar uma nova publicação.
  *
  * @param {import("playwright").Page} pagina
+ * @param {string} username - Usuário da conta (sem @) cujo perfil será aberto.
  * @throws {Error} Se o botão não for localizado.
  */
-async function abrirCriarPost(pagina) {
+async function abrirCriarPost(pagina, username) {
     log.info("Acessando o perfil.");
 
-    await pagina.goto(`${S.URL_INSTAGRAM}${config.instagram.usuario}/`, {
+    await pagina.goto(`${S.URL_INSTAGRAM}${encodeURIComponent(username)}/`, {
         waitUntil: "domcontentloaded",
         timeout: S.TEMPO.navegacao
     });
@@ -152,8 +152,8 @@ async function localizarBotaoCompartilhar(pagina) {
  *
  * @param {import("playwright").Page} pagina
  * @returns {{resposta: (null|{httpStatus: number, status: (string|null),
- *            mensagem: (string|null)})}} Objeto atualizado quando a
- *   resposta chegar.
+ *            mensagem: (string|null), codigo: (string|null)})}} Objeto
+ *   atualizado quando a resposta chegar.
  */
 function monitorarCriacaoPost(pagina) {
     const estado = { resposta: null };
@@ -177,10 +177,19 @@ function monitorarCriacaoPost(pagina) {
         estado.resposta = {
             httpStatus: resposta.status(),
             status: corpo?.status ?? null,
-            mensagem: corpo?.message ?? null
+            mensagem: corpo?.message ?? null,
+            // Código curto do post (instagram.com/p/<codigo>/), usado depois
+            // para coletar comentários. Campo não garantido pelo Instagram.
+            codigo: corpo?.media?.code ?? null
         };
 
-        log.debug("Resposta da criação de publicação", estado.resposta);
+        // Só as CHAVES (nunca os valores): serve para conferir se o campo
+        // `media.code` existe, sem gravar dados da publicação no log.
+        log.debug("Resposta da criação de publicação", {
+            ...estado.resposta,
+            chavesCorpo: corpo ? Object.keys(corpo) : [],
+            chavesMedia: corpo?.media ? Object.keys(corpo.media) : []
+        });
     });
 
     return estado;

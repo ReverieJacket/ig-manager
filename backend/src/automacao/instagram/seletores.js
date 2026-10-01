@@ -82,6 +82,32 @@ const MENSAGENS_ERRO = [
  */
 const URL_CRIACAO_POST = /\/api\/v1\/media\/configure/i;
 
+/**
+ * Botão que carrega mais comentários numa publicação. O Instagram costuma
+ * mostrá-lo como um ícone "+" (sem texto), por isso também se procura o
+ * `aria-label` do ícone. Cada item recebe a página.
+ */
+const BOTOES_CARREGAR_COMENTARIOS = [
+    (p) => p.getByRole("button", {
+        name: /(view|load) more comments|(ver|carregar) mais coment/i
+    }),
+    (p) => p
+        .locator(
+            'svg[aria-label*="Load more comments" i], ' +
+            'svg[aria-label*="Carregar mais coment" i]'
+        )
+        .locator("xpath=ancestor::*[@role='button' or self::button][1]")
+];
+
+/** Formato do código curto de um post (o trecho de `instagram.com/p/<codigo>/`). */
+const FORMATO_CODIGO_POST = /^[A-Za-z0-9_-]{5,30}$/;
+
+/** Limites da rolagem ao coletar comentários (evita laço infinito). */
+const COLETA = Object.freeze({
+    maximoRodadas: 40,
+    rodadasEstaveisParaConcluir: 2
+});
+
 const BOTAO_AVANCAR = /^Avançar$/i;
 const BOTAO_COMPARTILHAR = /^Compartilhar$/i;
 const LINK_NOVO_POST = "Novo post Criar";
@@ -96,6 +122,9 @@ module.exports = {
     CAMPOS_LEGENDA,
     MENSAGENS_SUCESSO,
     MENSAGENS_ERRO,
+    BOTOES_CARREGAR_COMENTARIOS,
+    COLETA,
+    FORMATO_CODIGO_POST,
     URL_CRIACAO_POST,
     BOTAO_AVANCAR,
     BOTAO_COMPARTILHAR,

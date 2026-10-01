@@ -1,18 +1,15 @@
 /**
  * Orquestra a publicação de uma imagem no Instagram via Playwright.
  *
- * Fluxo: abrir navegador -> restaurar sessão -> abrir "Criar" -> enviar
- * imagem -> avançar editor -> legenda -> Compartilhar -> aguardar
- * confirmação. Os passos ficam em `passos.js`.
+ * Fluxo: abrir sessão da conta -> abrir "Criar" -> enviar imagem ->
+ * avançar editor -> legenda -> Compartilhar -> aguardar confirmação.
+ * Os passos ficam em `passos.js`; a abertura da sessão em `navegador.js`.
  */
 const fs = require("fs");
-const { chromium } = require("playwright");
 
-const { config, exigirVariaveis } = require("../../config/env");
 const { log, salvarScreenshot } = require("./helpers");
-const { restaurarSessao, verificarLogin } = require("./sessao");
+const { abrirSessao } = require("./navegador");
 const passos = require("./passos");
-const { URL_INSTAGRAM, TEMPO } = require("./seletores");
 
 /**
  * @typedef {Object} ResultadoPublicacao
@@ -22,27 +19,40 @@ const { URL_INSTAGRAM, TEMPO } = require("./seletores");
  *   tente novamente sem conferir o perfil).
  * @property {string} mensagem - Descrição legível do resultado.
  * @property {string} [evidencia] - Indício usado (ou ausente) na confirmação.
+ * @property {string|null} [codigoPost] - Código curto do post no Instagram
+ *   (o trecho de `instagram.com/p/<codigo>/`), quando informado pela API.
+ *   Necessário depois para coletar os comentários.
  */
 
 /**
- * Publica uma imagem com legenda usando a sessão salva do Instagram.
+ * Publica uma imagem com legenda usando a sessão salva da conta.
  * Nunca lança erro: falhas são devolvidas em `ResultadoPublicacao`.
  *
  * @param {string} caminhoImagem - Caminho absoluto da imagem no disco.
  * @param {string} legenda - Texto da publicação.
  * @param {string} [mimetype] - Tipo da imagem (apenas para log).
  * @param {number} contaId - ID da conta cuja sessão será utilizada.
+ * @param {string} username - Usuário da conta (sem @); o perfil aberto na automação.
  * @returns {Promise<ResultadoPublicacao>}
  */
-async function publicarNoInstagram(caminhoImagem, legenda, mimetype, contaId) {
-    let navegador;
-    let contexto;
+async function publicarNoInstagram(
+    caminhoImagem,
+    legenda,
+    mimetype,
+    contaId,
+    username
+) {
+    let sessao;
     let pagina;
     let compartilhou = false;
 
     try {
         if (!Number.isSafeInteger(Number(contaId)) || Number(contaId) <= 0) {
             throw new Error("Informe o ID da conta do Instagram para publicar.");
+        }
+
+        if (!username || typeof username !== "string") {
+            throw new Error("Informe o usuário da conta do Instagram para publicar.");
         }
 
         if (!caminhoImagem || typeof caminhoImagem !== "string") {
@@ -59,39 +69,10 @@ async function publicarNoInstagram(caminhoImagem, legenda, mimetype, contaId) {
 
         log.info("Iniciando automação.");
 
-        // headless: false — o Instagram bloqueia com mais frequência
-        // navegadores sem interface.
-        navegador = await chromium.launch({ headless: false });
-        contexto = await navegador.newContext({
-            viewport: { width: 1365, height: 900 }
-        });
+        sessao = await abrirSessao(contaId);
+        pagina = sessao.pagina;
 
-        await restaurarSessao(contexto, Number(contaId));
-
-        pagina = await contexto.newPage();
-        pagina.setDefaultTimeout(TEMPO.padrao);
-
-        pagina.on("pageerror", (erro) => {
-            log.erro(`Erro da página: ${erro.message}`);
-        });
-
-        pagina.on("console", (mensagem) => {
-            if (mensagem.type() === "error") {
-                log.erro(`Erro de console: ${mensagem.text()}`);
-            }
-        });
-
-        log.info("Abrindo Instagram.");
-
-        await pagina.goto(URL_INSTAGRAM, {
-            waitUntil: "domcontentloaded",
-            timeout: TEMPO.navegacao
-        });
-
-        await pagina.waitForTimeout(3000);
-        await verificarLogin(pagina);
-
-        await passos.abrirCriarPost(pagina);
+        await passos.abrirCriarPost(pagina, username);
 
         log.info("Localizando campo de upload.");
         const campoUpload = await passos.localizarCampoUpload(pagina);
@@ -132,7 +113,8 @@ async function publicarNoInstagram(caminhoImagem, legenda, mimetype, contaId) {
                 sucesso: true,
                 incerto: false,
                 mensagem: "Publicação confirmada pelo Instagram.",
-                evidencia: confirmacao.evidencia
+                evidencia: confirmacao.evidencia,
+                codigoPost: monitor.resposta?.codigo ?? null
             };
         }
 
@@ -171,8 +153,7 @@ async function publicarNoInstagram(caminhoImagem, legenda, mimetype, contaId) {
             mensagem: erro.message
         };
     } finally {
-        if (contexto) await contexto.close().catch(() => {});
-        if (navegador) await navegador.close().catch(() => {});
+        if (sessao) await sessao.fechar();
 
         log.info("Automação finalizada.");
     }

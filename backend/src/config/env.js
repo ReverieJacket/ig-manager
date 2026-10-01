@@ -46,12 +46,6 @@ const config = {
         chaveServico: process.env.SUPABASE_SERVICE_ROLE_KEY
     },
 
-    instagram: {
-        /** Perfil aberto pela automação; deve corresponder à sessão salva. */
-        usuario: process.env.INSTAGRAM_USERNAME,
-        arquivoSessao: path.join(DIRETORIO_STORAGE, "instagram-auth.json")
-    },
-
     diretorios: {
         storage: DIRETORIO_STORAGE,
         uploads: path.join(DIRETORIO_STORAGE, "uploads"),

@@ -56,19 +56,35 @@
         </span>
       </div>
 
-      <TabelaPublicacoes v-else :publicacoes="filtradas" />
+      <TabelaPublicacoes
+        v-else
+        :publicacoes="filtradas"
+        @comentarios="publicacaoAberta = $event"
+      />
     </section>
+
+    <ModalComentarios
+      :publicacao="publicacaoAberta"
+      @fechar="publicacaoAberta = null"
+      @atualizado="carregar({ silencioso: true })"
+    />
   </div>
 </template>
 
 <script setup>
+import { ref } from "vue";
+
+import ModalComentarios from "../components/publicacoes/ModalComentarios.vue";
 import ResumoPublicacoes from "../components/publicacoes/ResumoPublicacoes.vue";
 import TabelaPublicacoes from "../components/publicacoes/TabelaPublicacoes.vue";
 import { ABAS_FILTRO } from "../constants/publicacoes";
 import { usePublicacoes } from "../composables/usePublicacoes";
 
-const { carregando, erro, filtro, busca, filtradas, contagens } =
+const { carregando, erro, filtro, busca, filtradas, contagens, carregar } =
   usePublicacoes();
+
+/** Publicação cujos comentários estão abertos no modal (`null` = fechado). */
+const publicacaoAberta = ref(null);
 </script>
 
 <style scoped>
