@@ -17,3 +17,18 @@ export function cadastrarConta(dados) {
     body: JSON.stringify(dados),
   });
 }
+
+/** Inicia o login do Instagram no navegador da maquina do backend. */
+export function conectarInstagram(contaId) {
+  return requisicao(`/contas/${contaId}/conectar`, { method: "POST" });
+}
+
+/** Consulta o estado do processo de conexao. */
+export function consultarConexao(contaId) {
+  return requisicao(`/contas/${contaId}/conexao`);
+}
+
+/** Remove a sessao local da conta. */
+export function desconectarInstagram(contaId) {
+  return requisicao(`/contas/${contaId}/conexao`, { method: "DELETE" });
+}

@@ -1,19 +1,15 @@
 /**
- * Rotas de contas do Instagram.
- * GET /contas lista contas ativas; POST /contas cadastra uma conta manualmente.
+ * Rotas de contas do Instagram, incluindo conexao local via navegador.
  */
 const { Router } = require("express");
 const contasService = require("../services/contas.service");
-
+const instagramAuth = require("../services/instagram-auth.service");
 const router = Router();
 
-router.get("/", async (req, res) => {
-    res.json(await contasService.listarContasAtivas());
-});
+router.get("/", async (req,res) => res.json(await contasService.listarContasAtivas()));
+router.post("/", async (req,res) => res.status(201).json(await contasService.cadastrarConta(req.body)));
+router.post("/:id/conectar", async (req,res) => res.json(await instagramAuth.iniciar(req.params.id)));
+router.get("/:id/conexao", async (req,res) => res.json(await instagramAuth.consultar(req.params.id)));
+router.delete("/:id/conexao", async (req,res) => res.json(await instagramAuth.desconectar(req.params.id)));
 
-router.post("/", async (req, res) => {
-    const conta = await contasService.cadastrarConta(req.body);
-    res.status(201).json(conta);
-});
-
-module.exports = router;
+module.exports=router;
