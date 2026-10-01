@@ -45,6 +45,22 @@ function tratarErros(erro, req, res, next) {
         });
     }
 
+    // Erros do leitor de corpo (body-parser): o problema é da requisição,
+    // não do servidor, então a resposta é 4xx e não 500.
+    if (erro.type === "entity.parse.failed") {
+        return res.status(400).json({
+            sucesso: false,
+            mensagem: "Corpo da requisição inválido: o JSON enviado está malformado."
+        });
+    }
+
+    if (erro.type === "entity.too.large") {
+        return res.status(413).json({
+            sucesso: false,
+            mensagem: "Corpo da requisição grande demais."
+        });
+    }
+
     // O pino-http (middleware de requisições) registra a resposta 500 e
     // anexa este erro, com pilha e id da requisição, em uma única linha.
     res.err = erro instanceof Error ? erro : new Error(formatarErro(erro));
