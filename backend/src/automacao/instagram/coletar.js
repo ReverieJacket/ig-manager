@@ -117,6 +117,9 @@ async function coletarComentariosDoPost(contaId, codigoPost) {
         // Mesma visita ao post: o contador de curtidas não custa outra abertura.
         const curtidas = await extrairCurtidas(pagina);
 
+        // Sem contador: guarda uma imagem para entender o que o Instagram mostrou.
+        if (!curtidas) await salvarScreenshot(pagina, "curtidas-nao-encontradas");
+
         // A legenda aparece na lista, mas não é um comentário.
         const comentarios = todos.filter((c) => c.tipo === "comentario" && c.id);
 
@@ -124,6 +127,7 @@ async function coletarComentariosDoPost(contaId, codigoPost) {
             codigoPost,
             total: comentarios.length,
             curtidas: curtidas?.valor ?? null,
+            curtidasFonte: curtidas?.fonte ?? null,
             completa,
             rodadas
         });
