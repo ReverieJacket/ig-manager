@@ -11,37 +11,25 @@
     </div>
 
     <section class="cartao create-card">
-      <!-- Conta -->
+      <!-- Contas do Instagram -->
       <div class="form-section">
-        <label for="conta">Conta do Instagram</label>
-
-        <select
-          id="conta"
-          v-model="form.contaId.value"
-          class="campo"
-          :disabled="carregandoContas || form.enviando.value"
-        >
-          <option value="" disabled>
-            {{ carregandoContas ? "Carregando contas..." : "Selecione uma conta" }}
-          </option>
-
-          <option
-            v-for="conta in contas"
-            :key="conta.id"
-            :value="String(conta.id)"
-          >
-            {{ conta.nome }} ({{ conta.username }})
-          </option>
-        </select>
-
+        <label>Contas do Instagram</label>
+        <div class="account-selection" :aria-busy="carregandoContas">
+          <label v-for="conta in contas" :key="conta.id" class="account-option">
+            <input
+              v-model="form.contaIds.value"
+              type="checkbox"
+              :value="String(conta.id)"
+              :disabled="carregandoContas || form.enviando.value"
+            />
+            <span>{{ conta.nome }} (@{{ conta.username }})</span>
+          </label>
+        </div>
         <small v-if="erroContas" class="field-error">{{ erroContas }}</small>
-
-        <small
-          v-else-if="!carregandoContas && contas.length === 0"
-          class="field-warning"
-        >
+        <small v-else-if="!carregandoContas && contas.length === 0" class="field-warning">
           Nenhuma conta ativa cadastrada. Cadastre uma conta no Supabase.
         </small>
+        <small v-else class="field-hint">Selecione uma ou mais contas para publicar o mesmo conteúdo.</small>
       </div>
 
       <!-- Imagem -->
@@ -159,7 +147,7 @@ const bloqueado = computed(
 
 // Com uma única conta ativa, já a deixa selecionada.
 watch(contas, (lista) => {
-  if (lista.length === 1) form.contaId.value = String(lista[0].id);
+  if (lista.length === 1) form.contaIds.value = [String(lista[0].id)];
 });
 </script>
 
@@ -213,6 +201,23 @@ textarea.campo {
   color: var(--cor-erro-texto);
   font-size: 12px;
 }
+
+.account-selection {
+  display: grid;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid var(--cor-borda, #ddd);
+  border-radius: 8px;
+}
+.account-option {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.account-option input { accent-color: var(--cor-primaria); }
+.field-hint { color: #777; font-size: 12px; }
 
 .field-warning {
   color: #946200;

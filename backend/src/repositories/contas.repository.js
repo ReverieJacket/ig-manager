@@ -47,4 +47,24 @@ async function criar(conta) {
     return data;
 }
 
-module.exports = { listarAtivas, buscarPorId, buscarPorIds, buscarPorUsername, criar };
+
+async function criarConvite(convite) {
+    const { data, error } = await supabase.from("convites_contas_instagram")
+        .insert(convite).select("id, cliente, expires_at, created_at").single();
+    if (error) throw error;
+    return data;
+}
+async function buscarConvitePorHash(tokenHash) {
+    const { data, error } = await supabase.from("convites_contas_instagram")
+        .select("id, cliente, expires_at, used_at").eq("token_hash", tokenHash).maybeSingle();
+    if (error) throw error;
+    return data;
+}
+async function marcarConviteUtilizado(id) {
+    const { data, error } = await supabase.from("convites_contas_instagram")
+        .update({ used_at: new Date().toISOString() }).eq("id", id).is("used_at", null)
+        .select("id").maybeSingle();
+    if (error) throw error;
+    return data;
+}
+module.exports = { listarAtivas, buscarPorId, buscarPorIds, buscarPorUsername, criar, criarConvite, buscarConvitePorHash, marcarConviteUtilizado };

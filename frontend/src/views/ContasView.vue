@@ -105,7 +105,7 @@
           <div class="campo-grupo">
             <label for="cliente">Cliente <span>*</span></label>
             <input id="cliente" v-model.trim="form.cliente" class="campo" type="text" required maxlength="120" placeholder="Nome do cliente" />
-            <small>O vínculo definitivo será validado pelo backend na implementação da API.</small>
+            <small>O cliente será vinculado automaticamente ao convite.</small>
           </div>
 
           <template v-if="modalTipo === 'manual'">
@@ -128,7 +128,12 @@
               </select>
             </div>
             <div class="aviso-seguranca">
-              O link será exclusivo e deverá expirar automaticamente. O cliente não precisará informar a senha do Instagram.
+              O link será exclusivo, terá validade limitada e poderá ser usado uma única vez. O cliente não precisará informar a senha do Instagram.
+            </div>
+            <div v-if="conviteUrl" class="convite-gerado">
+              <label for="link-gerado">Link de cadastro gerado</label>
+              <input id="link-gerado" class="campo" :value="conviteUrl" readonly />
+              <button class="botao botao--secundario" type="button" @click="copiarConvite">Copiar link</button>
             </div>
           </template>
 
@@ -146,13 +151,14 @@
 <script setup>
 import { computed, reactive, ref, watch, onBeforeUnmount } from 'vue';
 import { useContas } from '../composables/useContas';
-import { cadastrarConta, conectarInstagram, consultarConexao, desconectarInstagram } from '../api/contas';
+import { cadastrarConta, conectarInstagram, consultarConexao, desconectarInstagram, gerarConviteConta } from '../api/contas';
 
 const { contas, carregando, erro, carregar } = useContas();
 const busca = ref('');
 const modalAberto = ref(false);
 const modalTipo = ref('manual');
 const mensagem = ref('');
+const conviteUrl = ref('');
 const enviando = ref(false);
 const form = reactive({ cliente: '', nome: '', username: '', validade: '24' });
 const conexoes = ref({});
@@ -219,6 +225,7 @@ const filtradas = computed(() => {
 function abrirModal(tipo) {
   modalTipo.value = tipo;
   mensagem.value = '';
+  conviteUrl.value = '';
   Object.assign(form, { cliente: '', nome: '', username: '', validade: '24' });
   modalAberto.value = true;
 }
@@ -231,13 +238,14 @@ function fecharModal() {
 async function enviarFormulario() {
   mensagem.value = '';
 
-  if (modalTipo.value === 'link') {
-    mensagem.value = 'A geração de links será implementada em uma etapa própria. Por enquanto, utilize o cadastro manual.';
-    return;
-  }
-
   enviando.value = true;
   try {
+    if (modalTipo.value === 'link') {
+      const convite = await gerarConviteConta({ cliente: form.cliente, validadeHoras: Number(form.validade) });
+      conviteUrl.value = convite.url;
+      mensagem.value = 'Link gerado com sucesso. Copie e compartilhe com o cliente.';
+      return;
+    }
     await cadastrarConta({
       cliente: form.cliente,
       nome: form.nome,
@@ -249,6 +257,15 @@ async function enviarFormulario() {
     mensagem.value = erroApi.message || 'Não foi possível cadastrar a conta.';
   } finally {
     enviando.value = false;
+  }
+}
+
+async function copiarConvite() {
+  try {
+    await navigator.clipboard.writeText(conviteUrl.value);
+    mensagem.value = 'Link copiado para a área de transferência.';
+  } catch {
+    mensagem.value = 'Não foi possível copiar automaticamente. Selecione e copie o link.';
   }
 }
 

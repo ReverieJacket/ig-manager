@@ -32,3 +32,26 @@ export function consultarConexao(contaId) {
 export function desconectarInstagram(contaId) {
   return requisicao(`/contas/${contaId}/conexao`, { method: "DELETE" });
 }
+
+/** Gera um convite exclusivo de cadastro para um cliente. */
+export function gerarConviteConta(dados) {
+  return requisicao("/contas/convites", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(dados),
+  });
+}
+
+/** Consulta os dados públicos de um convite. */
+export function consultarConviteConta(token) {
+  return requisicao(`/contas/convites/${encodeURIComponent(token)}`);
+}
+
+/** Envia o cadastro realizado pelo cliente usando o convite. */
+export function cadastrarContaPorConvite(token, dados) {
+  return requisicao(`/contas/convites/${encodeURIComponent(token)}/cadastro`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(dados),
+  });
+}

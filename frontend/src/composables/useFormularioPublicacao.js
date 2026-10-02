@@ -15,7 +15,7 @@ import { dataDeHoje } from "../utils/formatadores";
  *   - ações: `escolherArquivo(arquivo)`, `enviar({ agendado })`.
  */
 export function useFormularioPublicacao() {
-  const contaId = ref("");
+  const contaIds = ref([]);
   const texto = ref("");
   const agendar = ref(false);
   const data = ref("");
@@ -37,7 +37,7 @@ export function useFormularioPublicacao() {
   const dataMinima = computed(dataDeHoje);
 
   const formularioValido = computed(() => {
-    if (!contaId.value || !arquivo.value || !texto.value.trim()) {
+    if (!contaIds.value.length || !arquivo.value || !texto.value.trim()) {
       return false;
     }
 
@@ -128,8 +128,8 @@ export function useFormularioPublicacao() {
     if (!formularioValido.value) {
       definirMensagem(
         agendado
-          ? "Selecione uma conta, uma imagem, informe a legenda, a data e o horário."
-          : "Selecione uma conta, uma imagem e informe a legenda.",
+          ? "Selecione pelo menos uma conta, uma imagem, informe a legenda, a data e o horário."
+          : "Selecione pelo menos uma conta, uma imagem e informe a legenda.",
         false
       );
       return;
@@ -139,23 +139,31 @@ export function useFormularioPublicacao() {
     definirMensagem("", false);
 
     try {
-      const resultado = await criarPublicacao({
-        imagem: arquivo.value,
-        texto: texto.value.trim(),
-        dataHora: agendado
-          ? montarDataHoraAgendada()
-          : new Date().toISOString(),
-        contaId: contaId.value,
-      });
-
+      const dataHora = agendado ? montarDataHoraAgendada() : new Date().toISOString();
+      const resultados = [];
+      for (const contaId of contaIds.value) {
+        try {
+          const resultado = await criarPublicacao({
+            imagem: arquivo.value,
+            texto: texto.value.trim(),
+            dataHora,
+            contaId,
+          });
+          resultados.push({ sucesso: true, mensagem: resultado.mensagem });
+        } catch (erroConta) {
+          resultados.push({ sucesso: false, mensagem: erroConta.message || "Falha na publicação." });
+        }
+      }
+      const concluidas = resultados.filter((item) => item.sucesso).length;
+      const falhas = resultados.length - concluidas;
       definirMensagem(
-        resultado.mensagem ||
-          (agendado
-            ? "Publicação agendada com sucesso."
-            : "Publicação processada com sucesso."),
-        true
+        falhas === 0
+          ? `${concluidas} publicação(ões) ${agendado ? "agendada(s)" : "concluída(s)"} com sucesso.`
+          : `${concluidas} concluída(s) e ${falhas} com falha. Confira o histórico de Postagens.`,
+        falhas === 0,
+        falhas > 0 && concluidas > 0
       );
-      limpar();
+      if (concluidas > 0) limpar();
     } catch (erro) {
       console.error("Erro ao enviar publicação:", erro);
       definirMensagem(
@@ -171,7 +179,7 @@ export function useFormularioPublicacao() {
   onUnmounted(liberarPrevia);
 
   return {
-    contaId,
+    contaIds,
     texto,
     agendar,
     data,

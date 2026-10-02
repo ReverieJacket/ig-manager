@@ -12,6 +12,12 @@ import AppLayout from "../components/layout/AppLayout.vue";
 
 const routes = [
   {
+    path: "/cadastro-conta/:token",
+    name: "cadastro-conta",
+    component: () => import("../views/CadastroContaConviteView.vue"),
+    meta: { titulo: "Cadastro de conta Instagram" },
+  },
+  {
     path: "/",
     component: AppLayout,
     redirect: "/postagens",
