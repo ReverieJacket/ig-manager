@@ -1,5 +1,11 @@
-import { createApp } from 'vue'
-import './style.css'
-import App from './App.vue'
+/**
+ * Ponto de entrada do frontend: cria o app Vue, registra o roteador e
+ * carrega os estilos globais.
+ */
+import { createApp } from "vue";
 
-createApp(App).mount('#app')
+import App from "./App.vue";
+import router from "./router";
+import "./styles/base.css";
+
+createApp(App).use(router).mount("#app");

@@ -1,5 +1,9 @@
-# Logs
-logs
+
+# =====================================
+# LOGS
+# =====================================
+logs/
+**/logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -7,18 +11,89 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
+# =====================================
+# DEPENDÊNCIAS
+# =====================================
+node_modules/
+**/node_modules/
+
+# =====================================
+# BUILD E ARQUIVOS GERADOS
+# =====================================
+dist/
+dist-ssr/
+**/dist/
+build/
+coverage/
 *.local
 
-# Editor directories and files
+# =====================================
+# VARIÁVEIS DE AMBIENTE E SEGREDOS
+# =====================================
+.env
+.env.*
+!.env.example
+!.env.example.*
+
+# =====================================
+# AUTENTICAÇÃO E SESSÕES
+# =====================================
+auth.json
+**/auth.json
+storage-state*.json
+**/storage-state*.json
+.playwright/.auth/
+**/playwright/.auth/
+
+# =====================================
+# INSTAGRAM E PLAYWRIGHT
+# =====================================
+backend/perfil-instagram/
+backend/profile-instagram/
+backend/.auth/
+backend/test-results/
+backend/playwright-report/
+backend/playwright/.cache/
+
+# =====================================
+# UPLOADS E ARQUIVOS TEMPORÁRIOS
+# =====================================
+backend/uploads/*
+!backend/uploads/.gitkeep
+temp/
+tmp/
+*.tmp
+
+# =====================================
+# EDITORES
+# =====================================
 .vscode/*
 !.vscode/extensions.json
-.idea
-.DS_Store
+.idea/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+
+# =====================================
+# SISTEMA OPERACIONAL
+# =====================================
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# =====================================
+# CACHE
+# =====================================
+.cache/
+.parcel-cache/
+.vite/
+
+# =====================================
+# CHAVES E CERTIFICADOS PRIVADOS
+# =====================================
+*.pem
+*.key
+*.p12
+*.pfx

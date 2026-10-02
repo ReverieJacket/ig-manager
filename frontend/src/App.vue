@@ -1,7 +1,3 @@
 <template>
-  <NovaPublicacao />
+  <router-view />
 </template>
-
-<script setup>
-import NovaPublicacao from "./views/NovaPublicacao.vue";
-</script>

@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev/**]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        env:
+          # O Playwright não precisa baixar navegadores para o CI.
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+      - name: Verificar sintaxe do backend
+        run: node --check backend/src/server.js
+      - name: Build do frontend
+        run: npm run build
