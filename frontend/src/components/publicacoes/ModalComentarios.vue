@@ -34,9 +34,14 @@
         <div class="contagem">
           <strong>{{ total }}</strong>
           {{ total === 1 ? "comentário" : "comentários" }}
+          <template v-if="totalRespostas">
+            · <strong>{{ totalRespostas }}</strong>
+            {{ totalRespostas === 1 ? "resposta" : "respostas" }}
+          </template>
           <span class="atualizado">
             ·
-            <template v-if="atualizadoEm" >
+            <template v-if="curtidasTexto">♡ {{ curtidasTexto }} {{ curtidasTexto === "1" ? "curtida" : "curtidas" }} ·</template>
+            <template v-if="atualizadoEm">
               atualizado {{ formatarDataRelativa(atualizadoEm) }}
             </template>
             <template v-else>ainda não coletado</template>
@@ -89,40 +94,7 @@
         </p>
 
         <ul v-else class="lista">
-          <li
-            v-for="item in itens"
-            :key="item.id"
-            class="item"
-            :class="{ 'item--removido': item.removido_em }"
-          >
-            <div class="avatar" aria-hidden="true">
-              {{ item.autor_username.charAt(0).toUpperCase() }}
-            </div>
-
-            <div class="corpo">
-              <div class="cabecalho-item">
-                <strong>@{{ item.autor_username }}</strong>
-
-                <time
-                  :datetime="item.publicado_em"
-                  :title="formatarData(item.publicado_em)"
-                >
-                  {{ formatarDataRelativa(item.publicado_em) }}
-                </time>
-
-                <span v-if="item.oculto" class="selo">oculto pelo Instagram</span>
-                <span
-                  v-if="item.removido_em"
-                  class="selo selo--removido"
-                  :title="`Deixou de aparecer em ${formatarData(item.removido_em)}`"
-                >
-                  removido
-                </span>
-              </div>
-
-              <p class="texto">{{ item.texto }}</p>
-            </div>
-          </li>
+          <ItemComentario v-for="item in itens" :key="item.id" :item="item" />
         </ul>
 
         <button
@@ -143,7 +115,8 @@
 import { computed, nextTick, ref, watch } from "vue";
 
 import { useComentarios } from "../../composables/useComentarios";
-import { formatarData, formatarDataRelativa } from "../../utils/formatadores";
+import { formatarCurtidas, formatarDataRelativa } from "../../utils/formatadores";
+import ItemComentario from "./ItemComentario.vue";
 
 /**
  * @property {object|null} publicacao - Publicação a exibir; `null` mantém o
@@ -165,7 +138,9 @@ const publicacaoId = computed(() => props.publicacao?.id ?? null);
 const {
   itens,
   total,
+  totalRespostas,
   atualizadoEm,
+  curtidasColetadas,
   carregando,
   erro,
   temMais,
@@ -175,6 +150,25 @@ const {
   carregarMais,
   coletar,
 } = useComentarios(publicacaoId);
+
+/**
+ * Curtidas a exibir: a da coleta feita agora, ou a que já veio na lista de
+ * publicações. `null` (ainda sem leitura) esconde o trecho.
+ */
+const curtidasTexto = computed(() => {
+  if (curtidasColetadas.value) {
+    return formatarCurtidas(
+      curtidasColetadas.value.valor,
+      curtidasColetadas.value.aproximado
+    );
+  }
+
+  const p = props.publicacao;
+
+  return p && p.curtidas !== null && p.curtidas !== undefined
+    ? formatarCurtidas(p.curtidas, p.curtidas_aproximado)
+    : null;
+});
 
 // Abre/fecha o <dialog> conforme a publicação informada.
 watch(
@@ -332,69 +326,6 @@ watch(resumoColeta, (resumo) => {
   margin: 0;
   padding: 0;
   list-style: none;
-}
-
-.item {
-  display: flex;
-  gap: 12px;
-  padding: 14px 0;
-  border-bottom: 1px solid #f0f0f0;
-}
-
-.item--removido {
-  opacity: 0.6;
-}
-
-.avatar {
-  display: flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #f58529, #dd2a7b, #8134af);
-  color: #fff;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.corpo {
-  min-width: 0;
-}
-
-.cabecalho-item {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 8px;
-  font-size: 13px;
-}
-
-.cabecalho-item time {
-  color: var(--cor-texto-suave);
-  font-size: 12px;
-}
-
-.selo {
-  padding: 2px 6px;
-  border-radius: 5px;
-  background: #eee;
-  color: #555;
-  font-size: 11px;
-}
-
-.selo--removido {
-  background: var(--cor-erro-fundo);
-  color: var(--cor-erro-texto);
-}
-
-.texto {
-  margin: 4px 0 0;
-  font-size: 14px;
-  line-height: 1.45;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
 }
 
 .estado {

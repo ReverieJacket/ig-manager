@@ -39,10 +39,17 @@
 
           <td>{{ formatarData(post.data_hora) }}</td>
 
-          <!-- Curtidas ainda não são fornecidas pelo backend (exibem 0). -->
           <td>
             <div class="engagement">
-              <span>♡ {{ post.curtidas ?? 0 }}</span>
+              <span
+                :title="
+                  post.curtidas_atualizado_em
+                    ? `Curtidas lidas em ${formatarData(post.curtidas_atualizado_em)}`
+                    : 'Ainda não coletado'
+                "
+              >
+                ♡ {{ formatarCurtidas(post.curtidas, post.curtidas_aproximado) }}
+              </span>
 
               <button
                 type="button"
@@ -75,6 +82,7 @@
 <script setup>
 import { STATUS } from "../../constants/publicacoes";
 import {
+  formatarCurtidas,
   formatarData,
   formatarStatus,
   normalizarStatus,

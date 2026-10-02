@@ -5,6 +5,7 @@
 import { computed, ref, watch } from "vue";
 
 import { coletarComentarios, listarComentarios } from "../api/comentarios";
+import { formatarCurtidas } from "../utils/formatadores";
 
 const POR_PAGINA = 30;
 
@@ -12,7 +13,9 @@ const POR_PAGINA = 30;
  * @param {import("vue").Ref<number|null>} publicacaoId - Publicação
  *   exibida; ao mudar, a lista é reiniciada. `null` = nada a mostrar.
  * @returns Estado reativo e ações:
- *   - `itens`, `total`, `atualizadoEm`: dados da lista;
+ *   - `itens` (comentários principais, cada um com `respostas`), `total`,
+ *     `totalRespostas`, `atualizadoEm`: dados da lista;
+ *   - `curtidasColetadas`: curtidas lidas na última coleta (ou `null`);
  *   - `carregando`, `erro`: estado do carregamento;
  *   - `temMais`: há mais páginas a buscar;
  *   - `incluirRemovidos`: filtro editado pela tela;
@@ -21,12 +24,18 @@ const POR_PAGINA = 30;
  */
 export function useComentarios(publicacaoId) {
   const itens = ref([]);
+  /** Quantidade de comentários PRINCIPAIS (base da paginação). */
   const total = ref(0);
+  /** Quantidade de respostas, somadas de todos os comentários. */
+  const totalRespostas = ref(0);
   const pagina = ref(1);
   const atualizadoEm = ref(null);
   const carregando = ref(false);
   const erro = ref("");
   const incluirRemovidos = ref(false);
+
+  /** Curtidas lidas na última coleta desta sessão: `{ valor, aproximado }` ou `null`. */
+  const curtidasColetadas = ref(null);
 
   const coletando = ref(false);
   /** `{ tipo: "sucesso" | "aviso" | "erro", texto }` ou `null`. */
@@ -60,6 +69,7 @@ export function useComentarios(publicacaoId) {
       itens.value =
         numero === 1 ? resposta.itens : [...itens.value, ...resposta.itens];
       total.value = resposta.total;
+      totalRespostas.value = resposta.total_respostas ?? 0;
       atualizadoEm.value = resposta.atualizado_em;
       pagina.value = numero;
     } catch (e) {
@@ -75,9 +85,11 @@ export function useComentarios(publicacaoId) {
   function reiniciar() {
     itens.value = [];
     total.value = 0;
+    totalRespostas.value = 0;
     pagina.value = 1;
     atualizadoEm.value = null;
     resumoColeta.value = null;
+    curtidasColetadas.value = null;
     erro.value = "";
 
     return carregarPagina(1);
@@ -100,18 +112,41 @@ export function useComentarios(publicacaoId) {
 
     try {
       const r = await coletarComentarios(id);
-      const partes = [`${r.novos} novo(s)`];
+      const partes = [
+        r.novas_respostas
+          ? `${r.novos} novo(s), ${r.novas_respostas} deles resposta(s)`
+          : `${r.novos} novo(s)`,
+      ];
 
       if (r.reaparecidos) partes.push(`${r.reaparecidos} reapareceu(ram)`);
       if (r.removidos) partes.push(`${r.removidos} removido(s)`);
 
-      resumoColeta.value = r.completa
-        ? { tipo: "sucesso", texto: `Atualizado: ${partes.join(", ")}.` }
+      if (r.curtidas !== null && r.curtidas !== undefined) {
+        curtidasColetadas.value = {
+          valor: r.curtidas,
+          aproximado: r.curtidas_aproximado,
+        };
+      }
+
+      const curtidas =
+        curtidasColetadas.value && r.curtidas !== null
+          ? ` ♡ ${formatarCurtidas(r.curtidas, r.curtidas_aproximado)} curtidas.`
+          : " Contador de curtidas não encontrado.";
+
+      // Lista de respostas incompleta: o que sumiu pode só não ter sido aberto.
+      const aviso = r.respostas_completas === false
+        ? " Nem todas as respostas foram carregadas, então nenhuma resposta foi marcada como removida."
+        : "";
+
+      resumoColeta.value = r.completa && !aviso
+        ? { tipo: "sucesso", texto: `Atualizado: ${partes.join(", ")}.${curtidas}` }
+        : r.completa
+        ? { tipo: "aviso", texto: `Atualizado: ${partes.join(", ")}.${curtidas}${aviso}` }
         : {
             tipo: "aviso",
             texto:
               `Coleta parcial (${partes.join(", ")}): nem todos os comentários ` +
-              "foram carregados, então nenhuma remoção foi registrada.",
+              `foram carregados, então nenhuma remoção foi registrada.${curtidas}`,
           };
 
       await carregarPagina(1);
@@ -137,7 +172,9 @@ export function useComentarios(publicacaoId) {
   return {
     itens,
     total,
+    totalRespostas,
     atualizadoEm,
+    curtidasColetadas,
     carregando,
     erro,
     temMais,
