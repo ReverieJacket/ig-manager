@@ -60,7 +60,28 @@ function estado(id) {
   return p ? {contaId:p.contaId,username:p.username,status:p.status,mensagem:p.mensagem} :
     {contaId:Number(id),status:"desconectado",mensagem:"Nenhum processo de conexao ativo."};
 }
-async function consultar(id) { const p=processos.get(Number(id)); if(p) await concluirSeAutenticado(p); return estado(id); }
+async function consultar(id) {
+  const n = Number(id);
+  const p = processos.get(n);
+
+  if (p) {
+    await concluirSeAutenticado(p);
+    return estado(n);
+  }
+
+  // Recupera o status após navegar para outra tela ou reiniciar o backend.
+  // A existência do arquivo indica sessão salva, não validação em tempo real.
+  const file = obterArquivoSessao(n);
+  if (fs.existsSync(file)) {
+    return {
+      contaId: n,
+      status: "conectado",
+      mensagem: "Sessão salva localmente; será validada ao utilizar a conta."
+    };
+  }
+
+  return estado(n);
+}
 async function encerrar(p) {
   if(p.timer) clearInterval(p.timer);
   if(p.browser) await p.browser.close().catch(()=>{});

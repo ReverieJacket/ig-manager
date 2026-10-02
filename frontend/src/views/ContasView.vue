@@ -144,7 +144,7 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref, onBeforeUnmount } from 'vue';
+import { computed, reactive, ref, watch, onBeforeUnmount } from 'vue';
 import { useContas } from '../composables/useContas';
 import { cadastrarConta, conectarInstagram, consultarConexao, desconectarInstagram } from '../api/contas';
 
@@ -158,6 +158,21 @@ const form = reactive({ cliente: '', nome: '', username: '', validade: '24' });
 const conexoes = ref({});
 const conectando = ref({});
 const intervalos = new Map();
+
+// Ao entrar/retornar à tela, recupera o status persistido de cada conta.
+watch(contas, (lista) => {
+  for (const conta of lista) {
+    if (conexoes.value[conta.id]) continue;
+    consultarConexao(conta.id)
+      .then((estado) => { conexoes.value[conta.id] = estado; })
+      .catch((e) => {
+        conexoes.value[conta.id] = {
+          status: 'erro',
+          mensagem: e.message || 'Falha ao consultar conexão.'
+        };
+      });
+  }
+}, { immediate: true });
 
 async function iniciarConexao(conta) {
   conectando.value[conta.id] = true;
