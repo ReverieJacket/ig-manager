@@ -99,12 +99,24 @@ const BOTOES_CARREGAR_COMENTARIOS = [
         .locator("xpath=ancestor::*[@role='button' or self::button][1]")
 ];
 
+/**
+ * Botão que expande as respostas de um comentário ("Ver respostas (2)",
+ * "Ver mais respostas", "View replies"). Exclui "Ocultar respostas"/"Hide
+ * replies", que fecham a lista em vez de abri-la.
+ */
+const BOTAO_VER_RESPOSTAS =
+    /^(?!.*(ocultar|esconder|hide)).*\b(ver|view)\b.*\b(respostas?|repl(?:y|ies))\b/i;
+
 /** Formato do código curto de um post (o trecho de `instagram.com/p/<codigo>/`). */
 const FORMATO_CODIGO_POST = /^[A-Za-z0-9_-]{5,30}$/;
 
 /** Limites da rolagem ao coletar comentários (evita laço infinito). */
 const COLETA = Object.freeze({
     maximoRodadas: 40,
+    /** Teto de cliques em "Ver respostas" numa coleta (evita laço infinito). */
+    maximoCliquesRespostas: 200,
+    /** Cliques seguidos sem aparecer nenhuma resposta nova antes de desistir. */
+    cliquesSemProgressoParaDesistir: 3,
     rodadasEstaveisParaConcluir: 2
 });
 
@@ -124,6 +136,7 @@ module.exports = {
     MENSAGENS_ERRO,
     BOTOES_CARREGAR_COMENTARIOS,
     COLETA,
+    BOTAO_VER_RESPOSTAS,
     FORMATO_CODIGO_POST,
     URL_CRIACAO_POST,
     BOTAO_AVANCAR,

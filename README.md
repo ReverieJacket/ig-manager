@@ -82,8 +82,8 @@ Supabase; o ícone ◌ na tela **Postagens** abre um modal com a lista.
 
 **Configuração (uma vez):**
 
-1. Execute no SQL Editor do Supabase, nesta ordem: `backend/db/migrations/001_comentarios.sql`
-   e `backend/db/migrations/002_curtidas.sql`.
+1. Execute no SQL Editor do Supabase, nesta ordem: `backend/db/migrations/001_comentarios.sql`,
+   `002_curtidas.sql` e `003_respostas_e_curtidas_de_comentarios.sql`.
 2. Gere a sessão da conta: `npm run login:instagram -- --conta <id>`.
 
 **Como funciona:**
@@ -102,6 +102,17 @@ Supabase; o ícone ◌ na tela **Postagens** abre um modal com a lista.
   `curtidas_historico`. Números abreviados pelo Instagram ("1,2 mil") ficam
   marcados como aproximados (`~`). Se o autor ocultar o contador, o valor
   anterior é mantido: "sem dado" não é "zero curtidas".
+
+- **Respostas a comentários e curtidas de cada comentário** (migração 003): a coleta
+  clica em "Ver respostas" até abrir todas e as guarda com o id do comentário pai
+  (`ig_comentario_pai_id`). A API devolve cada comentário principal com suas
+  `respostas` aninhadas; cada registro traz `eh_resposta` (coluna calculada pelo
+  banco) e `resposta_a_username` ("resposta a @fulano"), e o modal mostra o selo
+  "↳ resposta a @fulano" nas respostas e "N respostas" no comentário pai; `total` conta só os principais (base da paginação) e
+  `total_respostas` as respostas. Uma resposta só é marcada como removida se TODAS
+  as respostas foram abertas na coleta. O Instagram não mostra o contador de
+  curtidas de um comentário quando são 0, então ausência vale 0. Sem a migração
+  003 a coleta continua funcionando, mas sem respostas nem curtidas dos comentários.
 
 ## Logs
 

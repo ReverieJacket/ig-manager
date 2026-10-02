@@ -67,12 +67,16 @@ async function registrarCurtidas(publicacao, curtidas, agora) {
 }
 
 /**
- * Lista os comentários de uma publicação (paginado).
+ * Lista os comentários PRINCIPAIS de uma publicação (paginado), cada um com
+ * suas respostas aninhadas em `respostas` (da mais antiga para a mais nova).
+ *
+ * `total` conta só os principais (é o que a paginação usa); `total_respostas`
+ * conta as respostas.
  *
  * @param {number} publicacaoId
  * @param {{limite: number, pagina: number, incluirRemovidos: boolean}} opcoes
- * @returns {Promise<{total: number, pagina: number, limite: number,
- *   atualizado_em: (string|null), itens: object[]}>}
+ * @returns {Promise<{total: number, total_respostas: number, pagina: number,
+ *   limite: number, atualizado_em: (string|null), itens: object[]}>}
  * @throws {ErroHttp} 404 se a publicação não existir.
  */
 async function listarComentarios(publicacaoId, { limite, pagina, incluirRemovidos }) {
@@ -80,17 +84,58 @@ async function listarComentarios(publicacaoId, { limite, pagina, incluirRemovido
 
     if (!publicacao) throw new ErroHttp(404, "Publicação não encontrada.");
 
+    // Sem a migração 003, lista como antes (sem respostas nem curtidas).
+    const comRespostas = await comentariosRepository.colunasDeRespostasDisponiveis();
+
     const { itens, total } = await comentariosRepository.listarPorPublicacao(
         publicacaoId,
-        { limite, deslocamento: (pagina - 1) * limite, incluirRemovidos }
+        { limite, deslocamento: (pagina - 1) * limite, incluirRemovidos, comRespostas }
     );
+
+    let totalRespostas = 0;
+    let comentarios;
+
+    if (comRespostas) {
+        const respostas = await comentariosRepository.listarRespostas(
+            publicacaoId,
+            itens.map((item) => item.ig_comentario_id),
+            incluirRemovidos
+        );
+
+        const porPai = new Map();
+
+        for (const resposta of respostas) {
+            const lista = porPai.get(resposta.ig_comentario_pai_id) || [];
+
+            lista.push(resposta);
+            porPai.set(resposta.ig_comentario_pai_id, lista);
+        }
+
+        comentarios = itens.map((item) => ({
+            ...item,
+            respostas: porPai.get(item.ig_comentario_id) || []
+        }));
+
+        totalRespostas = await comentariosRepository.contarRespostas(
+            publicacaoId,
+            incluirRemovidos
+        );
+    } else {
+        comentarios = itens.map((item) => ({
+            ...item,
+            curtidas: 0,
+            curtidas_aproximado: false,
+            respostas: []
+        }));
+    }
 
     return {
         total,
+        total_respostas: totalRespostas,
         pagina,
         limite,
         atualizado_em: publicacao.comentarios_atualizado_em ?? null,
-        itens
+        itens: comentarios
     };
 }
 
@@ -99,9 +144,10 @@ async function listarComentarios(publicacaoId, { limite, pagina, incluirRemovido
  * com o banco. Roda na fila da automação (um navegador por vez).
  *
  * @param {number} publicacaoId
- * @returns {Promise<{novos: number, reaparecidos: number, removidos: number,
- *   total: number, completa: boolean, curtidas: (number|null),
- *   curtidas_aproximado: boolean}>}
+ * @returns {Promise<{novos: number, novas_respostas: number,
+ *   reaparecidos: number, removidos: number, total: number,
+ *   completa: boolean, respostas_completas: boolean, curtidas: (number|null),
+ *   curtidas_aproximado: boolean}>} `total` inclui as respostas.
  * @throws {ErroHttp} 404 (publicação inexistente), 409 (publicação sem
  *   código do post ou ainda não publicada), 502 (falha ao acessar o Instagram).
  */
@@ -135,16 +181,49 @@ async function coletarComentarios(publicacaoId) {
     }
 
     const agora = new Date().toISOString();
-    const existentes = await comentariosRepository.listarParaSincronizar(publicacaoId);
-    const plano = planejarSincronizacao(existentes, coleta.comentarios, coleta.completa);
+    const comRespostas = await comentariosRepository.colunasDeRespostasDisponiveis();
+
+    let coletados = coleta.comentarios;
+
+    if (!comRespostas) {
+        log.aviso(
+            "Migração 003_respostas_e_curtidas_de_comentarios.sql pendente (ou desatualizada: " +
+            "execute-a de novo): as respostas e as curtidas dos comentários NÃO serão guardadas."
+        );
+
+        // Sem a coluna do pai, uma resposta viraria um comentário solto e confuso.
+        coletados = coletados.filter((c) => c.tipo !== "resposta");
+    }
+
+    const existentes = await comentariosRepository.listarParaSincronizar(
+        publicacaoId,
+        { comRespostas }
+    );
+    const plano = planejarSincronizacao(
+        existentes,
+        coletados,
+        coleta.completa,
+        coleta.respostasCompletas ?? coleta.completa
+    );
 
     await comentariosRepository.gravarLote(
-        plano.gravar.map((linha) => ({
-            ...linha,
-            publicacao_id: publicacaoId,
-            conta_id: publicacao.conta_id,
-            ultima_vez_visto_em: agora
-        }))
+        plano.gravar.map((linha) => {
+            // Sem a migração, não se enviam as colunas que ainda não existem.
+            const {
+                ig_comentario_pai_id: _pai,
+                resposta_a_username: _respondido,
+                curtidas: _curtidas,
+                curtidas_aproximado: _aproximado,
+                ...base
+            } = linha;
+
+            return {
+                ...(comRespostas ? linha : base),
+                publicacao_id: publicacaoId,
+                conta_id: publicacao.conta_id,
+                ultima_vez_visto_em: agora
+            };
+        })
     );
 
     if (plano.removerIds.length > 0) {
@@ -162,20 +241,24 @@ async function coletarComentarios(publicacaoId) {
 
     log.info(`Comentários da publicação ${publicacaoId} sincronizados`, {
         novos: plano.novos,
+        novasRespostas: plano.novasRespostas,
         reaparecidos: plano.reaparecidos,
         removidos: plano.removidos,
         total,
         completa: coleta.completa,
+        respostasCompletas: coleta.respostasCompletas ?? coleta.completa,
         curtidas: curtidas?.valor ?? null,
         removocoesIgnoradas: plano.removocoesIgnoradas
     });
 
     return {
         novos: plano.novos,
+        novas_respostas: plano.novasRespostas,
         reaparecidos: plano.reaparecidos,
         removidos: plano.removidos,
         total,
         completa: coleta.completa,
+        respostas_completas: coleta.respostasCompletas ?? coleta.completa,
         curtidas: curtidas?.valor ?? null,
         curtidas_aproximado: curtidas?.aproximado ?? false
     };
