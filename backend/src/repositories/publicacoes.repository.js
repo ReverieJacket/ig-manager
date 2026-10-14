@@ -1,18 +1,10 @@
 /**
  * Repositório de publicações (tabela `publicacoes`).
  *
- * Camada de acesso a dados: só conhece o Supabase. Todas as funções
- * lançam o erro do Supabase em caso de falha.
+ * Camada de acesso a dados: só conhece o PostgreSQL (via pg pool).
+ * Todas as funções lançam o erro do pg em caso de falha.
  */
-const { supabase } = require("../lib/supabase");
-
-const TABELA = "publicacoes";
-/**
- * `*` (e não uma lista) para que as colunas criadas em migrações
- * (`ig_codigo`, `comentarios_total`...) apareçam automaticamente e a API
- * não quebre caso a migração ainda não tenha sido executada.
- */
-const COLUNAS = "*";
+const { pool } = require("../lib/db");
 
 /**
  * Ciclo de vida de uma publicação.
@@ -27,36 +19,26 @@ const STATUS = Object.freeze({
 
 /**
  * Lista todas as publicações, da mais recente para a mais antiga.
- *
- * @returns {Promise<object[]>}
  */
 async function listar() {
-    const { data, error } = await supabase
-        .from(TABELA)
-        .select(COLUNAS)
-        .order("data_hora", { ascending: false });
-
-    if (error) throw error;
-
-    return data || [];
+    const { rows } = await pool.query(
+        `SELECT * FROM publicacoes ORDER BY data_hora DESC`
+    );
+    return rows;
 }
 
 /**
  * Busca uma publicação pelo identificador.
  *
  * @param {number} id
- * @returns {Promise<object|null>} A publicação, ou `null` se não existir.
+ * @returns {Promise<object|null>}
  */
 async function buscarPorId(id) {
-    const { data, error } = await supabase
-        .from(TABELA)
-        .select(COLUNAS)
-        .eq("id", id)
-        .maybeSingle();
-
-    if (error) throw error;
-
-    return data;
+    const { rows } = await pool.query(
+        `SELECT * FROM publicacoes WHERE id = $1`,
+        [id]
+    );
+    return rows[0] || null;
 }
 
 /**
@@ -67,15 +49,17 @@ async function buscarPorId(id) {
  * @returns {Promise<object>} O registro criado (com `id`).
  */
 async function criar(registro) {
-    const { data, error } = await supabase
-        .from(TABELA)
-        .insert(registro)
-        .select()
-        .single();
+    const colunas = Object.keys(registro);
+    const valores = Object.values(registro);
+    const placeholders = colunas.map((_, i) => `$${i + 1}`).join(", ");
 
-    if (error) throw error;
-
-    return data;
+    const { rows } = await pool.query(
+        `INSERT INTO publicacoes (${colunas.join(", ")})
+         VALUES (${placeholders})
+         RETURNING *`,
+        valores
+    );
+    return rows[0];
 }
 
 /**
@@ -86,16 +70,16 @@ async function criar(registro) {
  * @returns {Promise<object>} O registro atualizado.
  */
 async function atualizar(id, campos) {
-    const { data, error } = await supabase
-        .from(TABELA)
-        .update(campos)
-        .eq("id", id)
-        .select()
-        .single();
+    const chaves = Object.keys(campos);
+    const valores = Object.values(campos);
 
-    if (error) throw error;
+    const sets = chaves.map((col, i) => `${col} = $${i + 1}`).join(", ");
 
-    return data;
+    const { rows } = await pool.query(
+        `UPDATE publicacoes SET ${sets} WHERE id = $${chaves.length + 1} RETURNING *`,
+        [...valores, id]
+    );
+    return rows[0];
 }
 
 module.exports = { STATUS, listar, buscarPorId, criar, atualizar };

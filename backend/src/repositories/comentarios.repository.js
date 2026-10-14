@@ -1,14 +1,13 @@
 /**
  * Repositório de comentários (tabela `comentarios_instagram`).
  *
- * Camada de acesso a dados: só conhece o Supabase. Todas as funções
- * lançam o erro do Supabase em caso de falha.
+ * Camada de acesso a dados: só conhece o PostgreSQL (via pg pool).
  *
  * Respostas a comentários e curtidas de cada comentário dependem das colunas
  * criadas pela migração 003. `colunasDeRespostasDisponiveis` permite ao
  * serviço funcionar (sem esses dados) enquanto a migração não foi executada.
  */
-const { supabase } = require("../lib/supabase");
+const { pool } = require("../lib/db");
 
 const TABELA = "comentarios_instagram";
 
@@ -19,36 +18,22 @@ const COLUNAS_BASE = "id, autor_username, texto, publicado_em, oculto, removido_
 const COLUNAS_COM_RESPOSTAS = `${COLUNAS_BASE}, ig_comentario_id, ig_comentario_pai_id, eh_resposta, resposta_a_username, curtidas, curtidas_aproximado`;
 
 /**
- * Indica se o erro do Supabase significa "coluna inexistente" (migração
- * pendente): 42703 no Postgres, PGRST204 no PostgREST.
- *
- * @param {{code?: string, message?: string}} erro
- * @returns {boolean}
- */
-function colunaAusente(erro) {
-    return (
-        erro?.code === "42703" ||
-        erro?.code === "PGRST204" ||
-        /column .* does not exist|schema cache/i.test(erro?.message || "")
-    );
-}
-
-/**
  * Verifica se a migração 003 (respostas e curtidas de comentários) já foi
- * executada.
+ * executada, checando se as colunas existem na tabela.
  *
  * @returns {Promise<boolean>}
  */
 async function colunasDeRespostasDisponiveis() {
-    const { error } = await supabase
-        .from(TABELA)
-        .select("ig_comentario_pai_id, resposta_a_username, eh_resposta, curtidas")
-        .limit(1);
-
-    if (!error) return true;
-    if (colunaAusente(error)) return false;
-
-    throw error;
+    try {
+        await pool.query(
+            `SELECT ig_comentario_pai_id, resposta_a_username, eh_resposta, curtidas
+             FROM ${TABELA} LIMIT 1`
+        );
+        return true;
+    } catch (err) {
+        if (err.code === "42703") return false; // coluna inexistente
+        throw err;
+    }
 }
 
 /**
@@ -56,53 +41,63 @@ async function colunasDeRespostasDisponiveis() {
  * necessário para comparar com uma nova coleta (inclui os removidos).
  *
  * @param {number} publicacaoId
- * @param {{comRespostas: boolean}} opcoes - `false` se a migração 003 não existe.
- * @returns {Promise<Array<{id: number, ig_comentario_id: string,
- *   ig_comentario_pai_id: (string|null|undefined), removido_em: (string|null)}>>}
+ * @param {{comRespostas: boolean}} opcoes
+ * @returns {Promise<Array>}
  */
 async function listarParaSincronizar(publicacaoId, { comRespostas }) {
     const colunas = comRespostas
         ? "id, ig_comentario_id, ig_comentario_pai_id, removido_em"
         : "id, ig_comentario_id, removido_em";
-    const linhas = [];
-    const passo = 1000;
 
-    // O Supabase limita cada resposta (1000 linhas por padrão): pagina-se.
-    for (let inicio = 0; ; inicio += passo) {
-        const { data, error } = await supabase
-            .from(TABELA)
-            .select(colunas)
-            .eq("publicacao_id", publicacaoId)
-            .order("id", { ascending: true })
-            .range(inicio, inicio + passo - 1);
-
-        if (error) throw error;
-
-        linhas.push(...data);
-
-        if (data.length < passo) break;
-    }
-
-    return linhas;
+    const { rows } = await pool.query(
+        `SELECT ${colunas} FROM ${TABELA}
+         WHERE publicacao_id = $1
+         ORDER BY id ASC`,
+        [publicacaoId]
+    );
+    return rows;
 }
 
 /**
- * Insere ou atualiza comentários (chave: publicação + id do Instagram).
- * Colunas não informadas mantêm o valor atual; em linhas novas valem os
- * padrões do banco (ex.: `primeira_vez_visto_em`).
+ * Insere ou atualiza comentários (chave: publicacao_id + ig_comentario_id).
+ * Requer UNIQUE constraint em (publicacao_id, ig_comentario_id).
  *
  * @param {Array<object>} linhas - Já com `publicacao_id` e `conta_id`.
  * @returns {Promise<void>}
  */
 async function gravarLote(linhas) {
-    for (let i = 0; i < linhas.length; i += TAMANHO_LOTE) {
-        const { error } = await supabase
-            .from(TABELA)
-            .upsert(linhas.slice(i, i + TAMANHO_LOTE), {
-                onConflict: "publicacao_id,ig_comentario_id"
-            });
+    if (linhas.length === 0) return;
 
-        if (error) throw error;
+    // Pega as colunas da primeira linha (todas devem ter a mesma estrutura).
+    const colunas = Object.keys(linhas[0]);
+    const colunasStr = colunas.join(", ");
+
+    // Colunas a atualizar no ON CONFLICT (todas exceto as de conflito).
+    const colunasConflito = ["publicacao_id", "ig_comentario_id"];
+    const colunasUpdate = colunas.filter((c) => !colunasConflito.includes(c));
+    const updateStr = colunasUpdate
+        .map((c) => `${c} = EXCLUDED.${c}`)
+        .join(", ");
+
+    for (let i = 0; i < linhas.length; i += TAMANHO_LOTE) {
+        const lote = linhas.slice(i, i + TAMANHO_LOTE);
+        const valores = [];
+        const linhasPlaceholders = [];
+
+        lote.forEach((linha, idx) => {
+            const offset = idx * colunas.length;
+            const phs = colunas.map((_, j) => `$${offset + j + 1}`);
+            linhasPlaceholders.push(`(${phs.join(", ")})`);
+            colunas.forEach((col) => valores.push(linha[col]));
+        });
+
+        await pool.query(
+            `INSERT INTO ${TABELA} (${colunasStr})
+             VALUES ${linhasPlaceholders.join(", ")}
+             ON CONFLICT (publicacao_id, ig_comentario_id)
+             DO UPDATE SET ${updateStr}`,
+            valores
+        );
     }
 }
 
@@ -115,32 +110,27 @@ async function gravarLote(linhas) {
  */
 async function marcarRemovidos(ids, quando) {
     for (let i = 0; i < ids.length; i += TAMANHO_LOTE) {
-        const { error } = await supabase
-            .from(TABELA)
-            .update({ removido_em: quando })
-            .in("id", ids.slice(i, i + TAMANHO_LOTE));
-
-        if (error) throw error;
+        const lote = ids.slice(i, i + TAMANHO_LOTE);
+        await pool.query(
+            `UPDATE ${TABELA} SET removido_em = $1 WHERE id = ANY($2)`,
+            [quando, lote]
+        );
     }
 }
 
 /**
- * Conta os comentários ativos (não removidos) de uma publicação, incluindo
- * as respostas.
+ * Conta os comentários ativos (não removidos) de uma publicação.
  *
  * @param {number} publicacaoId
  * @returns {Promise<number>}
  */
 async function contarAtivos(publicacaoId) {
-    const { count, error } = await supabase
-        .from(TABELA)
-        .select("id", { count: "exact", head: true })
-        .eq("publicacao_id", publicacaoId)
-        .is("removido_em", null);
-
-    if (error) throw error;
-
-    return count || 0;
+    const { rows } = await pool.query(
+        `SELECT COUNT(*)::int AS total FROM ${TABELA}
+         WHERE publicacao_id = $1 AND removido_em IS NULL`,
+        [publicacaoId]
+    );
+    return rows[0].total;
 }
 
 /**
@@ -151,57 +141,62 @@ async function contarAtivos(publicacaoId) {
  * @returns {Promise<number>}
  */
 async function contarRespostas(publicacaoId, incluirRemovidos) {
-    let consulta = supabase
-        .from(TABELA)
-        .select("id", { count: "exact", head: true })
-        .eq("publicacao_id", publicacaoId)
-        .not("ig_comentario_pai_id", "is", null);
+    const filtroRemovidos = incluirRemovidos ? "" : " AND removido_em IS NULL";
 
-    if (!incluirRemovidos) consulta = consulta.is("removido_em", null);
-
-    const { count, error } = await consulta;
-
-    if (error) throw error;
-
-    return count || 0;
+    const { rows } = await pool.query(
+        `SELECT COUNT(*)::int AS total FROM ${TABELA}
+         WHERE publicacao_id = $1
+           AND ig_comentario_pai_id IS NOT NULL
+           ${filtroRemovidos}`,
+        [publicacaoId]
+    );
+    return rows[0].total;
 }
 
 /**
- * Lista os comentários PRINCIPAIS de uma publicação, do mais recente ao mais
- * antigo. (As respostas vêm de `listarRespostas`.)
+ * Lista os comentários de uma publicação com paginação.
  *
  * @param {number} publicacaoId
  * @param {{limite: number, deslocamento: number, incluirRemovidos: boolean,
- *   comRespostas: boolean}} opcoes - `comRespostas: false` (migração 003
- *   pendente) lista tudo, sem os campos novos.
- * @returns {Promise<{itens: object[], total: number}>} `total` considera o
- *   mesmo filtro, para paginação.
+ *   comRespostas: boolean}} opcoes
+ * @returns {Promise<{itens: object[], total: number}>}
  */
 async function listarPorPublicacao(
     publicacaoId,
     { limite, deslocamento, incluirRemovidos, comRespostas }
 ) {
-    let consulta = supabase
-        .from(TABELA)
-        .select(comRespostas ? COLUNAS_COM_RESPOSTAS : COLUNAS_BASE, { count: "exact" })
-        .eq("publicacao_id", publicacaoId)
-        .order("publicado_em", { ascending: false })
-        .order("id", { ascending: false })
-        .range(deslocamento, deslocamento + limite - 1);
+    const colunas = comRespostas ? COLUNAS_COM_RESPOSTAS : COLUNAS_BASE;
 
-    if (comRespostas) consulta = consulta.is("ig_comentario_pai_id", null);
-    if (!incluirRemovidos) consulta = consulta.is("removido_em", null);
+    const condicoes = ["publicacao_id = $1"];
+    if (comRespostas) condicoes.push("ig_comentario_pai_id IS NULL");
+    if (!incluirRemovidos) condicoes.push("removido_em IS NULL");
 
-    const { data, count, error } = await consulta;
+    const where = condicoes.join(" AND ");
 
-    if (error) throw error;
+    // Buscar itens e total em paralelo.
+    const [dataResult, countResult] = await Promise.all([
+        pool.query(
+            `SELECT ${colunas} FROM ${TABELA}
+             WHERE ${where}
+             ORDER BY publicado_em DESC, id DESC
+             LIMIT $2 OFFSET $3`,
+            [publicacaoId, limite, deslocamento]
+        ),
+        pool.query(
+            `SELECT COUNT(*)::int AS total FROM ${TABELA} WHERE ${where}`,
+            [publicacaoId]
+        )
+    ]);
 
-    return { itens: data || [], total: count || 0 };
+    return {
+        itens: dataResult.rows,
+        total: countResult.rows[0].total
+    };
 }
 
 /**
- * Lista as respostas dos comentários informados, na ordem da conversa
- * (a mais antiga primeiro). Exige a migração 003.
+ * Lista as respostas dos comentários informados, na ordem da conversa.
+ * Exige a migração 003.
  *
  * @param {number} publicacaoId
  * @param {string[]} paiIds - `ig_comentario_id` dos comentários principais.
@@ -211,21 +206,17 @@ async function listarPorPublicacao(
 async function listarRespostas(publicacaoId, paiIds, incluirRemovidos) {
     if (paiIds.length === 0) return [];
 
-    let consulta = supabase
-        .from(TABELA)
-        .select(COLUNAS_COM_RESPOSTAS)
-        .eq("publicacao_id", publicacaoId)
-        .in("ig_comentario_pai_id", paiIds)
-        .order("publicado_em", { ascending: true })
-        .order("id", { ascending: true });
+    const filtroRemovidos = incluirRemovidos ? "" : " AND removido_em IS NULL";
 
-    if (!incluirRemovidos) consulta = consulta.is("removido_em", null);
-
-    const { data, error } = await consulta;
-
-    if (error) throw error;
-
-    return data || [];
+    const { rows } = await pool.query(
+        `SELECT ${COLUNAS_COM_RESPOSTAS} FROM ${TABELA}
+         WHERE publicacao_id = $1
+           AND ig_comentario_pai_id = ANY($2)
+           ${filtroRemovidos}
+         ORDER BY publicado_em ASC, id ASC`,
+        [publicacaoId, paiIds]
+    );
+    return rows;
 }
 
 module.exports = {

@@ -41,9 +41,12 @@ const config = {
     /** Origem permitida no CORS. Vazio = qualquer origem (apenas para desenvolvimento). */
     corsOrigin: process.env.CORS_ORIGIN || "",
 
-    supabase: {
-        url: process.env.SUPABASE_URL,
-        chaveServico: process.env.SUPABASE_SERVICE_ROLE_KEY
+    db: {
+        host: process.env.DB_HOST,
+        port: Number(process.env.DB_PORT || 5432),
+        nome: process.env.DB_NAME,
+        usuario: process.env.DB_USER,
+        senha: process.env.DB_PASSWORD
     },
 
     diretorios: {

@@ -1,70 +1,91 @@
 /**
  * Repositório de contas do Instagram (tabela `contas_instagram`).
- * Camada de acesso a dados: só conhece o Supabase.
+ * Camada de acesso a dados: só conhece o PostgreSQL (via pg pool).
  */
-const { supabase } = require("../lib/supabase");
+const { pool } = require("../lib/db");
 
-const TABELA = "contas_instagram";
 const COLUNAS = "id, nome, username, ativo, cliente";
 
 async function listarAtivas() {
-    const { data, error } = await supabase.from(TABELA)
-        .select(COLUNAS).eq("ativo", true).order("id", { ascending: true });
-    if (error) throw error;
-    return data || [];
+    const { rows } = await pool.query(
+        `SELECT ${COLUNAS} FROM contas_instagram WHERE ativo = true ORDER BY id ASC`
+    );
+    return rows;
 }
 
 async function buscarPorId(id) {
-    const { data, error } = await supabase.from(TABELA)
-        .select(COLUNAS).eq("id", id).maybeSingle();
-    if (error) throw error;
-    return data;
+    const { rows } = await pool.query(
+        `SELECT ${COLUNAS} FROM contas_instagram WHERE id = $1`,
+        [id]
+    );
+    return rows[0] || null;
 }
 
 async function buscarPorIds(ids) {
     if (ids.length === 0) return [];
-    const { data, error } = await supabase.from(TABELA)
-        .select("id, nome, username").in("id", ids);
-    if (error) throw error;
-    return data || [];
+    const { rows } = await pool.query(
+        `SELECT id, nome, username FROM contas_instagram WHERE id = ANY($1)`,
+        [ids]
+    );
+    return rows;
 }
 
 async function buscarPorUsername(username) {
-    const { data, error } = await supabase.from(TABELA)
-        .select(COLUNAS).ilike("username", username).maybeSingle();
-    if (error) throw error;
-    return data;
+    const { rows } = await pool.query(
+        `SELECT ${COLUNAS} FROM contas_instagram WHERE username ILIKE $1`,
+        [username]
+    );
+    return rows[0] || null;
 }
 
 async function criar(conta) {
-    const { data, error } = await supabase.from(TABELA).insert({
-        nome: conta.nome,
-        username: conta.username,
-        cliente: conta.cliente,
-        ativo: true
-    }).select(COLUNAS).single();
-    if (error) throw error;
-    return data;
+    const { rows } = await pool.query(
+        `INSERT INTO contas_instagram (nome, username, cliente, ativo)
+         VALUES ($1, $2, $3, true)
+         RETURNING ${COLUNAS}`,
+        [conta.nome, conta.username, conta.cliente]
+    );
+    return rows[0];
 }
-
 
 async function criarConvite(convite) {
-    const { data, error } = await supabase.from("convites_contas_instagram")
-        .insert(convite).select("id, cliente, expires_at, created_at").single();
-    if (error) throw error;
-    return data;
+    const { rows } = await pool.query(
+        `INSERT INTO convites_contas_instagram (cliente, token_hash, expires_at)
+         VALUES ($1, $2, $3)
+         RETURNING id, cliente, expires_at, created_at`,
+        [convite.cliente, convite.token_hash, convite.expires_at]
+    );
+    return rows[0];
 }
+
 async function buscarConvitePorHash(tokenHash) {
-    const { data, error } = await supabase.from("convites_contas_instagram")
-        .select("id, cliente, expires_at, used_at").eq("token_hash", tokenHash).maybeSingle();
-    if (error) throw error;
-    return data;
+    const { rows } = await pool.query(
+        `SELECT id, cliente, expires_at, used_at
+         FROM convites_contas_instagram
+         WHERE token_hash = $1`,
+        [tokenHash]
+    );
+    return rows[0] || null;
 }
+
 async function marcarConviteUtilizado(id) {
-    const { data, error } = await supabase.from("convites_contas_instagram")
-        .update({ used_at: new Date().toISOString() }).eq("id", id).is("used_at", null)
-        .select("id").maybeSingle();
-    if (error) throw error;
-    return data;
+    const { rows } = await pool.query(
+        `UPDATE convites_contas_instagram
+         SET used_at = NOW()
+         WHERE id = $1 AND used_at IS NULL
+         RETURNING id`,
+        [id]
+    );
+    return rows[0] || null;
 }
-module.exports = { listarAtivas, buscarPorId, buscarPorIds, buscarPorUsername, criar, criarConvite, buscarConvitePorHash, marcarConviteUtilizado };
+
+module.exports = {
+    listarAtivas,
+    buscarPorId,
+    buscarPorIds,
+    buscarPorUsername,
+    criar,
+    criarConvite,
+    buscarConvitePorHash,
+    marcarConviteUtilizado
+};
