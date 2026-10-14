@@ -5,9 +5,7 @@
  * `curtidas_aproximado`, `curtidas_atualizado_em`); aqui fica uma linha
  * por coleta, para acompanhar a evolução ao longo do tempo.
  */
-const { supabase } = require("../lib/supabase");
-
-const TABELA = "curtidas_historico";
+const { pool } = require("../lib/db");
 
 /**
  * Registra uma leitura de curtidas.
@@ -21,15 +19,11 @@ const TABELA = "curtidas_historico";
  * @returns {Promise<void>}
  */
 async function registrarHistorico({ publicacaoId, contaId, curtidas, aproximado, coletadoEm }) {
-    const { error } = await supabase.from(TABELA).insert({
-        publicacao_id: publicacaoId,
-        conta_id: contaId,
-        curtidas,
-        aproximado,
-        coletado_em: coletadoEm
-    });
-
-    if (error) throw error;
+    await pool.query(
+        `INSERT INTO curtidas_historico (publicacao_id, conta_id, curtidas, aproximado, coletado_em)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [publicacaoId, contaId, curtidas, aproximado, coletadoEm]
+    );
 }
 
 module.exports = { registrarHistorico };
