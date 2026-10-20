@@ -10,6 +10,11 @@ dist/
 # Dados gerados em tempo de execução (uploads, logs, sessão do Instagram)
 backend/storage/
 backend/uploads/
+# Pasta antiga de capturas/diagnósticos (hoje vão para backend/storage/logs)
+backend/logs/
+
+# Arquivos compactados (cópias e backups locais)
+*.zip
 
 # Sessões e perfis de navegador (contêm cookies: NUNCA versionar)
 auth.json

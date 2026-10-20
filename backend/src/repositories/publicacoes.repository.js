@@ -60,6 +60,25 @@ async function buscarPorId(id) {
 }
 
 /**
+ * Lista as publicações com um status, da mais antiga para a mais nova
+ * (ordem em que deveriam ter sido executadas).
+ *
+ * @param {string} status - Um dos valores de `STATUS`.
+ * @returns {Promise<object[]>}
+ */
+async function listarPorStatus(status) {
+    const { data, error } = await supabase
+        .from(TABELA)
+        .select(COLUNAS)
+        .eq("status", status)
+        .order("data_hora", { ascending: true });
+
+    if (error) throw error;
+
+    return data || [];
+}
+
+/**
  * Insere uma nova publicação.
  *
  * @param {{conta_id: number, imagem: string, texto: string,
@@ -98,4 +117,11 @@ async function atualizar(id, campos) {
     return data;
 }
 
-module.exports = { STATUS, listar, buscarPorId, criar, atualizar };
+module.exports = {
+    STATUS,
+    listar,
+    listarPorStatus,
+    buscarPorId,
+    criar,
+    atualizar
+};

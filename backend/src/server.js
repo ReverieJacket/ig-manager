@@ -6,6 +6,8 @@ const fs = require("fs");
 const { config } = require("./config/env");
 const { criarLogger } = require("./lib/logger");
 const { criarApp } = require("./app");
+const { formatarErro } = require("./lib/erros");
+const agendador = require("./services/agendador.service");
 
 const log = criarLogger("Servidor");
 
@@ -23,10 +25,27 @@ process.on("uncaughtException", (erro) => {
     setTimeout(() => process.exit(1), 100);
 });
 
-criarApp().listen(config.porta, () => {
-    log.info(`Servidor rodando em http://localhost:${config.porta}`, {
-        ambiente: config.emProducao ? "producao" : "desenvolvimento",
-        nivelLog: config.log.nivel,
-        arquivoLog: config.log.emArquivo ? config.log.arquivo : "desativado"
+async function iniciar() {
+    // Antes do `listen`: assim nenhuma publicação nova, criada por uma
+    // requisição, é confundida com uma que ficou presa em `publicando`.
+    try {
+        await agendador.restaurarPendentes();
+    } catch (erro) {
+        // Sem banco o servidor ainda sobe; os agendamentos antigos ficam
+        // pendentes até o próximo reinício.
+        log.erro(
+            "Não foi possível restaurar os agendamentos do banco",
+            formatarErro(erro)
+        );
+    }
+
+    criarApp().listen(config.porta, () => {
+        log.info(`Servidor rodando em http://localhost:${config.porta}`, {
+            ambiente: config.emProducao ? "producao" : "desenvolvimento",
+            nivelLog: config.log.nivel,
+            arquivoLog: config.log.emArquivo ? config.log.arquivo : "desativado"
+        });
     });
-});
+}
+
+iniciar();
