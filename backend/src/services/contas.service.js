@@ -2,6 +2,7 @@
  * Regras de negócio para contas do Instagram.
  */
 const contasRepository = require("../repositories/contas.repository");
+const clientesRepository = require("../repositories/clientes.repository");
 const { ErroHttp } = require("../lib/erros");
 
 function listarContasAtivas() {
@@ -31,7 +32,15 @@ async function cadastrarConta(dados) {
     const existente = await contasRepository.buscarPorUsername(username);
     if (existente) throw new ErroHttp(409, "Já existe uma conta cadastrada com esse nome de usuário.");
 
-    return contasRepository.criar({ cliente, nome, username });
+    // O nome digitado aponta para o cliente existente (ou cria um novo).
+    const registroCliente = await clientesRepository.buscarOuCriarPorNome(cliente);
+
+    return contasRepository.criar({
+        cliente: registroCliente.nome,
+        clienteId: registroCliente.id,
+        nome,
+        username
+    });
 }
 
 module.exports = { listarContasAtivas, buscarContaAtiva, cadastrarConta };

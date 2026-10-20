@@ -4,6 +4,8 @@
  */
 const crypto = require("crypto");
 const contasRepository = require("../repositories/contas.repository");
+const clientesRepository = require("../repositories/clientes.repository");
+const { config } = require("../config/env");
 const { ErroHttp } = require("../lib/erros");
 
 function hashToken(token) {
@@ -29,13 +31,14 @@ async function gerar({ cliente, validadeHoras }) {
   if (![24, 72, 168].includes(horas)) throw new ErroHttp(400, "Validade inválida. Escolha 24 horas, 3 dias ou 7 dias.");
   const token = crypto.randomBytes(32).toString("hex");
   const expiresAt = new Date(Date.now() + horas * 60 * 60 * 1000).toISOString();
+  const registroCliente = await clientesRepository.buscarOuCriarPorNome(nomeCliente);
   const convite = await contasRepository.criarConvite({
-    cliente: nomeCliente,
+    cliente: registroCliente.nome,
+    cliente_id: registroCliente.id,
     token_hash: hashToken(token),
     expires_at: expiresAt
   });
-  const baseUrl = (process.env.FRONTEND_URL || "http://localhost:5173").replace(/\/$/, "");
-  return { ...convite, url: `${baseUrl}/cadastro-conta/${token}` };
+  return { ...convite, url: `${config.frontendUrl}/cadastro-conta/${token}` };
 }
 async function consultar(token) {
   validarToken(token);
@@ -58,7 +61,10 @@ async function cadastrar(token, dados) {
   const consumido = await contasRepository.marcarConviteUtilizado(convite.id);
   if (!consumido) throw new ErroHttp(409, "Este link já foi utilizado.");
   try {
-    return await contasRepository.criar({ cliente: convite.cliente, nome, username });
+    // Convites gerados antes da migração 004 não têm `cliente_id`.
+    const clienteId = convite.cliente_id
+      ?? (await clientesRepository.buscarOuCriarPorNome(convite.cliente)).id;
+    return await contasRepository.criar({ cliente: convite.cliente, clienteId, nome, username });
   } catch (erro) {
     // Não reabre o convite automaticamente: evita reutilização concorrente.
     throw erro;

@@ -1,6 +1,7 @@
 <!--
   Layout principal: menu lateral fixo + área de conteúdo.
   É a rota pai do roteador; a tela atual aparece em <router-view />.
+  O menu muda conforme o perfil de quem está logado.
 -->
 <template>
   <div class="app-layout">
@@ -10,22 +11,33 @@
         <span>IG Manager</span>
       </div>
 
+      <span v-if="usuario" class="perfil-tag" :class="usuario.perfil">
+        {{ rotuloPerfil }}
+      </span>
+
       <nav class="navigation">
-        <router-link to="/postagens" class="nav-item" active-class="active">
-          <span class="nav-icon">⌂</span>
-          <span>Postagens</span>
-        </router-link>
-
-        <router-link to="/contas" class="nav-item" active-class="active">
-          <span class="nav-icon">◎</span>
-          <span>Contas</span>
-        </router-link>
-
-        <router-link to="/criar" class="nav-item" active-class="active">
-          <span class="nav-icon plus">+</span>
-          <span>Criar</span>
+        <router-link
+          v-for="item in itensMenu"
+          :key="item.para"
+          :to="item.para"
+          class="nav-item"
+          active-class="active"
+        >
+          <span class="nav-icon" :class="{ plus: item.icone === '+' }">{{ item.icone }}</span>
+          <span>{{ item.rotulo }}</span>
         </router-link>
       </nav>
+
+      <div v-if="usuario" class="usuario">
+        <div class="avatar" :class="usuario.perfil" aria-hidden="true">{{ iniciais }}</div>
+        <div class="usuario-dados">
+          <strong>{{ usuario.nome }}</strong>
+          <span>{{ ehAdmin ? "Administrador" : "Cliente" }}</span>
+        </div>
+        <button class="sair" type="button" :disabled="saindo" @click="sairDoSistema">
+          Sair
+        </button>
+      </div>
     </aside>
 
     <main class="main-content">
@@ -33,6 +45,52 @@
     </main>
   </div>
 </template>
+
+<script setup>
+import { computed, ref } from "vue";
+import { useRouter } from "vue-router";
+
+import { useSessao } from "../../composables/useSessao";
+
+const router = useRouter();
+const { usuario, ehAdmin, sair } = useSessao();
+const saindo = ref(false);
+
+const MENU_ADMIN = [
+  { para: "/postagens", icone: "⌂", rotulo: "Postagens" },
+  { para: "/contas", icone: "◎", rotulo: "Contas" },
+  { para: "/criar", icone: "+", rotulo: "Criar" },
+];
+
+const MENU_CLIENTE = [{ para: "/cliente", icone: "⌂", rotulo: "Minhas postagens" }];
+
+const itensMenu = computed(() => (ehAdmin.value ? MENU_ADMIN : MENU_CLIENTE));
+
+const rotuloPerfil = computed(() =>
+  ehAdmin.value ? "ADMINISTRADOR" : (usuario.value?.cliente?.nome || "CLIENTE").toUpperCase()
+);
+
+const iniciais = computed(() =>
+  (usuario.value?.nome || "")
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((parte) => parte[0].toUpperCase())
+    .join("")
+);
+
+async function sairDoSistema() {
+  saindo.value = true;
+  try {
+    await sair();
+  } catch {
+    // Mesmo se a API falhar, a sessão local já foi limpa.
+  } finally {
+    saindo.value = false;
+    router.replace({ name: "login" });
+  }
+}
+</script>
 
 <style scoped>
 .app-layout {
@@ -51,13 +109,15 @@
   padding: 28px 14px;
   background: var(--cor-superficie);
   border-right: 1px solid var(--cor-borda);
+  display: flex;
+  flex-direction: column;
 }
 
 .logo {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 42px;
+  margin-bottom: 30px;
   padding: 0 12px;
   color: #171717;
   font-size: 22px;
@@ -118,6 +178,91 @@
   font-size: 22px;
 }
 
+/* Perfil e usuário logado */
+.perfil-tag {
+  align-self: flex-start;
+  max-width: calc(100% - 24px);
+  margin: 0 12px 18px;
+  padding: 4px 9px;
+  overflow: hidden;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.perfil-tag.admin {
+  background: var(--cor-primaria);
+  color: #fff;
+}
+
+.perfil-tag.cliente {
+  background: #f3e8ff;
+  color: #6b21a8;
+}
+
+.usuario {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: auto;
+  padding: 14px 12px 0;
+  border-top: 1px solid #eee;
+}
+
+.avatar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #e9e9e9;
+  color: #444;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.avatar.cliente {
+  background: #f3e8ff;
+  color: #6b21a8;
+}
+
+.usuario-dados {
+  min-width: 0;
+}
+
+.usuario-dados strong {
+  display: block;
+  overflow: hidden;
+  font-size: 13px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.usuario-dados span {
+  color: var(--cor-texto-suave);
+  font-size: 12px;
+}
+
+.sair {
+  margin-left: auto;
+  padding: 5px 8px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background: #fff;
+  color: #666;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.sair:hover:not(:disabled) {
+  background: #f5f5f5;
+}
+
 /* Conteúdo */
 .main-content {
   min-height: 100vh;
@@ -138,8 +283,19 @@
   }
 
   .logo span,
-  .nav-item span:last-child {
+  .nav-item span:last-child,
+  .perfil-tag,
+  .usuario-dados {
     display: none;
+  }
+
+  .usuario {
+    flex-direction: column;
+    padding: 12px 0 0;
+  }
+
+  .sair {
+    margin-left: 0;
   }
 
   .navigation {
