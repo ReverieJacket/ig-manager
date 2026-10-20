@@ -42,7 +42,7 @@ async function concluirSeAutenticado(p) {
     p.status="cancelado"; p.mensagem="Navegador fechado antes da autenticacao."; await encerrar(p); return;
   }
   const url=p.page.url();
-  const login = /accounts\\/(login|challenge|two_factor)/i.test(url) ||
+  const login = /accounts\/(login|challenge|two_factor)/i.test(url) ||
     await p.page.locator('input[name="username"], input[name="password"]').first().isVisible().catch(()=>false);
   if (login) return;
   // Sinal conservador: exige elemento de navegacao autenticada, nao apenas URL fora do login.
