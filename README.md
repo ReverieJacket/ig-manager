@@ -47,11 +47,12 @@ Requisitos: Node 20+.
 npm install
 npx playwright install chromium        # uma vez
 
-cp backend/.env.example backend/.env   # preencha os valores
+cp backend/.env.example backend/.env   # preencha os valores (inclusive AUTH_SEGREDO)
 cp frontend/.env.example frontend/.env
 
-npm run login:instagram                # login manual; salva a sessão
 npm run verificar:conexao              # testa o Supabase
+npm run criar:admin                    # cria o primeiro administrador (pede e-mail, nome e senha)
+npm run login:instagram                # login manual; salva a sessão
 
 npm run dev:backend                    # http://localhost:3000
 npm run dev:frontend                   # http://localhost:5173
@@ -59,15 +60,37 @@ npm run dev:frontend                   # http://localhost:5173
 
 ## Banco de dados (Supabase)
 
-- `contas_instagram`: `id`, `nome`, `username`, `ativo`
+- `clientes`: `id`, `nome`, `ativo`
+- `usuarios`: `id`, `nome`, `email`, `senha_hash`, `perfil` (`admin` | `cliente`), `cliente_id`, `ativo`
+- `contas_instagram`: `id`, `nome`, `username`, `ativo`, `cliente_id`
 - `publicacoes`: `id`, `conta_id`, `imagem`, `texto`, `data_hora`, `status`, `erro`
   - `status`: `agendada` → `publicando` → `publicada` | `erro`
 
+## Perfis de acesso
+
+Todo acesso exige login, exceto o link de convite. Execute a migração
+`backend/db/migrations/004_clientes_usuarios.sql` no Supabase e crie o primeiro
+administrador com `npm run criar:admin` (rodar de novo com o mesmo e-mail redefine a senha).
+
+- **Administrador:** usa todas as telas atuais (Postagens, Contas, Criar).
+- **Cliente:** vê só os dados do próprio cliente. Por enquanto entra numa tela
+  provisória; "Minhas postagens" e "Aprovações" chegam nas próximas etapas.
+
+A senha é guardada com scrypt; a sessão é um token assinado em cookie httpOnly
+(8 h, ou 30 dias com "Manter conectado"). Após 5 senhas erradas, o login daquele
+e-mail fica bloqueado por 15 minutos.
+
 ## API
+
+Rotas sem login: `/`, `/auth/*` e o convite (`GET /contas/convites/:token`,
+`POST /contas/convites/:token/cadastro`). As demais exigem perfil administrador.
 
 | Método | Rota | Descrição |
 |---|---|---|
 | GET | `/` | Verificação de saúde |
+| POST | `/auth/entrar` | Login (`email`, `senha`, `manterConectado`); grava o cookie |
+| POST | `/auth/sair` | Encerra a sessão |
+| GET | `/auth/eu` | Usuário logado |
 | GET | `/contas` | Contas ativas |
 | GET | `/publicacoes` | Publicações com dados da conta |
 | POST | `/publicacoes` | Cria (multipart: `imagem`, `texto`, `dataHora`, `conta_id`) |

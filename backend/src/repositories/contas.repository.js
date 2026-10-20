@@ -5,7 +5,7 @@
 const { supabase } = require("../lib/supabase");
 
 const TABELA = "contas_instagram";
-const COLUNAS = "id, nome, username, ativo, cliente";
+const COLUNAS = "id, nome, username, ativo, cliente, cliente_id";
 
 async function listarAtivas() {
     const { data, error } = await supabase.from(TABELA)
@@ -40,7 +40,9 @@ async function criar(conta) {
     const { data, error } = await supabase.from(TABELA).insert({
         nome: conta.nome,
         username: conta.username,
+        // Texto mantido por compatibilidade; o vínculo oficial é `cliente_id`.
         cliente: conta.cliente,
+        cliente_id: conta.clienteId,
         ativo: true
     }).select(COLUNAS).single();
     if (error) throw error;
@@ -56,7 +58,7 @@ async function criarConvite(convite) {
 }
 async function buscarConvitePorHash(tokenHash) {
     const { data, error } = await supabase.from("convites_contas_instagram")
-        .select("id, cliente, expires_at, used_at").eq("token_hash", tokenHash).maybeSingle();
+        .select("id, cliente, cliente_id, expires_at, used_at").eq("token_hash", tokenHash).maybeSingle();
     if (error) throw error;
     return data;
 }

@@ -22,7 +22,14 @@ function criarApp() {
 
     // Primeiro, para registrar todas as requisições (inclusive as recusadas).
     app.use(requisicoes);
-    app.use(cors(config.corsOrigin ? { origin: config.corsOrigin } : undefined));
+    // `credentials: true` deixa o navegador enviar o cookie de sessão; para
+    // isso a origem precisa ser explícita (nunca "qualquer origem").
+    app.use(
+        cors({
+            origin: config.corsOrigin || config.frontendUrl,
+            credentials: true
+        })
+    );
     app.use(express.json());
     app.use(express.urlencoded({ extended: true }));
 

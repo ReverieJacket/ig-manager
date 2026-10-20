@@ -38,8 +38,28 @@ const config = {
         arquivo: path.join(DIRETORIO_STORAGE, "logs", "backend.log")
     },
 
-    /** Origem permitida no CORS. Vazio = qualquer origem (apenas para desenvolvimento). */
+    /** URL do frontend (links de convite e origem padrão do CORS). */
+    frontendUrl: (process.env.FRONTEND_URL || "http://localhost:5173").replace(/\/$/, ""),
+
+    /**
+     * Origem permitida no CORS. Com login por cookie a origem precisa ser
+     * explícita (o navegador recusa "qualquer origem" com credenciais);
+     * vazio = usa `frontendUrl`.
+     */
     corsOrigin: process.env.CORS_ORIGIN || "",
+
+    auth: {
+        /** Segredo que assina os tokens de sessão (mín. 32 caracteres). */
+        segredo: process.env.AUTH_SEGREDO,
+        nomeCookie: "igm_sessao",
+        /** Sessão comum: expira em 8 horas. */
+        duracaoPadraoMs: 8 * 60 * 60 * 1000,
+        /** "Manter conectado": 30 dias. */
+        duracaoLongaMs: 30 * 24 * 60 * 60 * 1000,
+        /** Limite de tentativas de login erradas por IP + e-mail. */
+        tentativasMaximas: 5,
+        janelaTentativasMs: 15 * 60 * 1000
+    },
 
     supabase: {
         url: process.env.SUPABASE_URL,
