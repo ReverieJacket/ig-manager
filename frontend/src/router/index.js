@@ -10,6 +10,8 @@
  * - `meta.publica`: abre sem login (login e link de convite).
  * - `meta.perfil`: só para esse perfil; o outro perfil é levado à
  *   própria tela inicial.
+ * - `meta.primeiroAcesso`: tela de criar senha; obrigatória enquanto o
+ *   usuário estiver com senha temporária, e só para esse caso.
  * - Demais rotas exigem login.
  *
  * A proteção de verdade está no backend; aqui é só navegação.
@@ -27,10 +29,17 @@ const routes = [
     meta: { titulo: "Entrar", publica: true },
   },
   {
+    // Fora do layout: quem está com senha temporária só vê esta tela.
+    path: "/primeiro-acesso",
+    name: "primeiro-acesso",
+    component: () => import("../views/PrimeiroAcessoView.vue"),
+    meta: { titulo: "Crie a sua senha", primeiroAcesso: true },
+  },
+  {
     path: "/cadastro-conta/:token",
     name: "cadastro-conta",
     component: () => import("../views/CadastroContaConviteView.vue"),
-    meta: { titulo: "Cadastro de conta Instagram", publica: true },
+    meta: { titulo: "Informe o seu perfil", publica: true },
   },
   {
     path: "/",
@@ -43,12 +52,8 @@ const routes = [
         component: () => import("../views/PostagensView.vue"),
         meta: { titulo: "Postagens", perfil: PERFIS.ADMIN },
       },
-      {
-        path: "contas",
-        name: "contas",
-        component: () => import("../views/ContasView.vue"),
-        meta: { titulo: "Contas", perfil: PERFIS.ADMIN },
-      },
+      // A antiga tela "Contas" foi incorporada a Clientes.
+      { path: "contas", redirect: "/clientes" },
       {
         path: "criar",
         name: "criar",
@@ -56,10 +61,29 @@ const routes = [
         meta: { titulo: "Criar", perfil: PERFIS.ADMIN },
       },
       {
-        path: "cliente",
-        name: "cliente-inicio",
-        component: () => import("../views/ClienteInicioView.vue"),
+        path: "clientes",
+        name: "clientes",
+        component: () => import("../views/ClientesView.vue"),
+        meta: { titulo: "Clientes", perfil: PERFIS.ADMIN },
+      },
+      {
+        path: "minhas-postagens",
+        name: "minhas-postagens",
+        component: () => import("../views/MinhasPostagensView.vue"),
         meta: { titulo: "Minhas postagens", perfil: PERFIS.CLIENTE },
+      },
+      {
+        path: "meus-perfis",
+        name: "meus-perfis",
+        component: () => import("../views/MeusPerfisView.vue"),
+        meta: { titulo: "Meus perfis", perfil: PERFIS.CLIENTE },
+      },
+      { path: "minhas-contas", redirect: "/meus-perfis" },
+      {
+        path: "meu-perfil",
+        name: "meu-perfil",
+        component: () => import("../views/MeuPerfilView.vue"),
+        meta: { titulo: "Meu perfil" },
       },
     ],
   },
@@ -89,6 +113,15 @@ router.beforeEach(async (to) => {
 
   if (!usuario) {
     return { name: "login", query: to.fullPath !== "/" ? { voltar: to.fullPath } : {} };
+  }
+
+  // Senha temporária: nada abre até a pessoa criar a própria senha.
+  if (usuario.senhaTemporaria) {
+    return to.meta.primeiroAcesso ? true : { name: "primeiro-acesso" };
+  }
+
+  if (to.meta.primeiroAcesso) {
+    return rotaInicial(usuario.perfil);
   }
 
   if (to.meta.perfil && to.meta.perfil !== usuario.perfil) {

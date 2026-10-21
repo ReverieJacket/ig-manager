@@ -9,7 +9,7 @@
         <tr>
           <th>Imagem</th>
           <th>Legenda</th>
-          <th>Conta</th>
+          <th>Perfil</th>
           <th>Status</th>
           <th>Data/Hora</th>
           <th>Engajamento</th>
@@ -35,6 +35,11 @@
             <span class="status" :class="normalizarStatus(post.status)">
               {{ formatarStatus(post.status) }}
             </span>
+            <small
+              v-if="normalizarStatus(post.status) === STATUS.ERRO && post.erro"
+              class="motivo-erro"
+              :title="post.erro"
+            >{{ post.erro }}</small>
           </td>
 
           <td>{{ formatarData(post.data_hora) }}</td>
@@ -166,6 +171,18 @@ tr:last-child td {
   color: #444;
   font-size: 11px;
   font-weight: 600;
+}
+
+.motivo-erro {
+  display: -webkit-box;
+  max-width: 190px;
+  margin-top: 5px;
+  overflow: hidden;
+  color: var(--cor-erro-texto);
+  font-size: 11.5px;
+  line-height: 1.35;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 .status.erro {

@@ -42,6 +42,46 @@ async function listar() {
 }
 
 /**
+ * Lista as publicações de um conjunto de contas, da mais recente para a
+ * mais antiga (área do cliente).
+ *
+ * @param {number[]} contaIds
+ * @param {string[]} status - Status a incluir.
+ * @returns {Promise<object[]>}
+ */
+async function listarPorContas(contaIds, status) {
+    if (contaIds.length === 0) return [];
+
+    const { data, error } = await supabase
+        .from(TABELA)
+        .select(COLUNAS)
+        .in("conta_id", contaIds)
+        .in("status", status)
+        .order("data_hora", { ascending: false });
+
+    if (error) throw error;
+
+    return data || [];
+}
+
+/**
+ * Indica se o perfil tem alguma publicação (de qualquer status).
+ *
+ * @param {number} contaId
+ * @returns {Promise<boolean>}
+ */
+async function existeParaConta(contaId) {
+    const { count, error } = await supabase
+        .from(TABELA)
+        .select("id", { count: "exact", head: true })
+        .eq("conta_id", contaId);
+
+    if (error) throw error;
+
+    return (count || 0) > 0;
+}
+
+/**
  * Busca uma publicação pelo identificador.
  *
  * @param {number} id
@@ -120,6 +160,8 @@ async function atualizar(id, campos) {
 module.exports = {
     STATUS,
     listar,
+    listarPorContas,
+    existeParaConta,
     listarPorStatus,
     buscarPorId,
     criar,

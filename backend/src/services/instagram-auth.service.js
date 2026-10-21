@@ -7,6 +7,7 @@ const path = require("path");
 const { chromium } = require("playwright");
 const { obterArquivoSessao } = require("../automacao/instagram/sessao");
 const contasService = require("./contas.service");
+const contasRepository = require("../repositories/contas.repository");
 
 const processos = new Map();
 
@@ -51,6 +52,8 @@ async function concluirSeAutenticado(p) {
   const file=obterArquivoSessao(p.contaId);
   fs.mkdirSync(path.dirname(file),{recursive:true});
   await p.context.storageState({path:file});
+  // Sessão nova: o perfil deixa de aparecer como "Sessão expirada".
+  await contasRepository.limparSessaoExpirada(p.contaId).catch(() => {});
   p.status="conectado"; p.mensagem="Sessao salva. Confira se o perfil aberto corresponde a conta cadastrada.";
   await encerrar(p);
 }
@@ -92,6 +95,14 @@ async function desconectar(id) {
   if(p) { await encerrar(p); processos.delete(n); }
   const file=obterArquivoSessao(n);
   if(fs.existsSync(file)) fs.unlinkSync(file);
+  await contasRepository.limparSessaoExpirada(n).catch(() => {});
   return {contaId:n,status:"desconectado",mensagem:"Sessao local removida."};
 }
-module.exports={iniciar,consultar,desconectar};
+/**
+ * Indica se a conta já tem sessão do Instagram salva (usado nas listagens).
+ * Não valida a sessão em tempo real; ela é conferida ao publicar.
+ */
+function contaConectada(id) {
+  try { return fs.existsSync(obterArquivoSessao(id)); } catch { return false; }
+}
+module.exports={iniciar,consultar,desconectar,contaConectada};

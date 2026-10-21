@@ -1,15 +1,21 @@
 /**
- * Rotas de autenticação.
+ * Rotas de autenticação e do próprio usuário.
  *
- * POST /auth/entrar - { email, senha, manterConectado } -> grava o cookie.
- * POST /auth/sair   - apaga o cookie.
- * GET  /auth/eu     - usuário da sessão atual (401 se não houver).
+ * POST  /auth/entrar       - { email, senha, manterConectado } -> grava o cookie.
+ * POST  /auth/sair         - apaga o cookie.
+ * GET   /auth/eu           - usuário da sessão atual (401 se não houver).
+ * PATCH /auth/eu           - { nome } -> altera o próprio nome.
+ * POST  /auth/trocar-senha - { senhaAtual, senhaNova } -> troca a própria senha,
+ *                            encerra as outras sessões e renova o cookie.
+ *
+ * `/auth/eu` e `/auth/trocar-senha` funcionam mesmo com senha temporária:
+ * é por elas que o usuário sai dessa situação.
  */
 const { Router } = require("express");
 
 const { ErroHttp } = require("../lib/erros");
 const { gravarSessao, apagarSessao } = require("../lib/cookies");
-const { autenticar } = require("../middlewares/autenticacao");
+const { autenticar, exigirSenhaDefinitiva } = require("../middlewares/autenticacao");
 const { limitarLogin, registrarFalha, registrarSucesso } = require("../middlewares/limiteLogin");
 const authService = require("../services/auth.service");
 
@@ -42,6 +48,27 @@ router.post("/sair", (req, res) => {
 
 router.get("/eu", autenticar, (req, res) => {
     res.json({ sucesso: true, usuario: req.usuario });
+});
+
+router.patch("/eu", autenticar, exigirSenhaDefinitiva, async (req, res) => {
+    const usuario = await authService.atualizarNome(req.usuario.id, req.body?.nome);
+    res.json({ sucesso: true, usuario });
+});
+
+router.post("/trocar-senha", autenticar, async (req, res) => {
+    const resultado = await authService.trocarSenha({
+        usuarioId: req.usuario.id,
+        senhaAtual: req.body?.senhaAtual,
+        senhaNova: req.body?.senhaNova,
+        // Mantém o tipo de sessão escolhido no login.
+        manterConectado: Boolean(req.sessao?.longa),
+        // Primeiro acesso: acabou de entrar com a senha temporária.
+        exigirSenhaAtual: !req.usuario.senhaTemporaria
+    });
+
+    gravarSessao(res, resultado.token, resultado.duracaoCookieMs);
+
+    res.json({ sucesso: true, usuario: resultado.usuario });
 });
 
 module.exports = router;

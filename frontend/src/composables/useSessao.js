@@ -15,7 +15,7 @@ let carregamento = null;
 
 /** Tela inicial de cada perfil. */
 export function rotaInicial(perfil) {
-  return perfil === PERFIS.CLIENTE ? { name: "cliente-inicio" } : { name: "postagens" };
+  return perfil === PERFIS.CLIENTE ? { name: "minhas-postagens" } : { name: "postagens" };
 }
 
 export function useSessao() {
@@ -54,6 +54,23 @@ export function useSessao() {
     }
   }
 
+  /** Troca a própria senha (inclusive a temporária do primeiro acesso). */
+  async function trocarSenha(dados) {
+    definirUsuario(await authApi.trocarSenha(dados));
+    return usuario.value;
+  }
+
+  /** Atualiza o próprio nome. */
+  async function atualizarPerfil(dados) {
+    definirUsuario(await authApi.atualizarPerfil(dados));
+    return usuario.value;
+  }
+
+  function definirUsuario(dados) {
+    usuario.value = dados;
+    carregamento = Promise.resolve(dados);
+  }
+
   /** Esquece a sessão local (ex.: o backend respondeu 401). */
   function limpar() {
     usuario.value = null;
@@ -67,6 +84,8 @@ export function useSessao() {
     carregar,
     entrar,
     sair,
+    trocarSenha,
+    atualizarPerfil,
     limpar,
   };
 }

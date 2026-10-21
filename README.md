@@ -62,41 +62,84 @@ npm run dev:frontend                   # http://localhost:5173
 
 - `clientes`: `id`, `nome`, `ativo`
 - `usuarios`: `id`, `nome`, `email`, `senha_hash`, `perfil` (`admin` | `cliente`), `cliente_id`, `ativo`
-- `contas_instagram`: `id`, `nome`, `username`, `ativo`, `cliente_id`
+- `contas_instagram` (perfis do Instagram): `id`, `nome`, `username`, `ativo`, `cliente_id`,
+  `sessao_expirada_em`, `sessao_erro` (preenchidos quando o Instagram pede login de novo)
 - `publicacoes`: `id`, `conta_id`, `imagem`, `texto`, `data_hora`, `status`, `erro`
   - `status`: `agendada` → `publicando` → `publicada` | `erro`
 
 ## Perfis de acesso
 
-Todo acesso exige login, exceto o link de convite. Execute a migração
-`backend/db/migrations/004_clientes_usuarios.sql` no Supabase e crie o primeiro
-administrador com `npm run criar:admin` (rodar de novo com o mesmo e-mail redefine a senha).
+Todo acesso exige login, exceto o link de convite. Execute no Supabase as migrações
+`004_clientes_usuarios.sql`, `005_area_cliente.sql`, `006_excluir_cliente.sql` e
+`007_sessao_expirada.sql` e crie o primeiro administrador
+com `npm run criar:admin` (rodar de novo com o mesmo e-mail redefine a senha).
 
-- **Administrador:** usa todas as telas atuais (Postagens, Contas, Criar).
-- **Cliente:** vê só os dados do próprio cliente. Por enquanto entra numa tela
-  provisória; "Minhas postagens" e "Aprovações" chegam nas próximas etapas.
+- **Administrador:** Postagens, **Clientes** e Criar. Em *Clientes* fica tudo de cada
+  cliente, em duas abas:
+  - *Perfis do Instagram*: adicionar perfil, **Conectar/Reconectar**, desconectar,
+    renomear, remover e gerar o **Link para o cliente** (validade de 24 h, 3 ou 7 dias)
+    para ele mesmo informar o @;
+  - *Usuários*: adicionar, redefinir senha, alterar e-mail, desativar/reativar.
+
+  O cabeçalho do cliente permite renomear, desativar e excluir (lixeira). Em *Criar*
+  os perfis aparecem agrupados por cliente, com "Todos os perfis conectados".
+- **Cliente** (dono do Instagram): *Minhas postagens* (publicadas e programadas,
+  só leitura), *Meus perfis* (informa o @, sem senha) e *Meu perfil*. Vê apenas
+  os dados do próprio cliente. "Aprovações" chega na próxima etapa.
+
+**Senhas:** o administrador nunca define nem vê a senha de um cliente. Ao criar um
+usuário ou redefinir a senha, o sistema gera uma **senha temporária** (mostrada uma
+única vez); no primeiro acesso a pessoa é obrigada a criar a dela.
 
 A senha é guardada com scrypt; a sessão é um token assinado em cookie httpOnly
-(8 h, ou 30 dias com "Manter conectado"). Após 5 senhas erradas, o login daquele
-e-mail fica bloqueado por 15 minutos.
+(8 h, ou 30 dias com "Manter conectado"). Trocar a senha ou o e-mail, redefinir a
+senha ou desativar o usuário encerra as sessões abertas dele. Após 5 senhas erradas,
+o login daquele e-mail fica bloqueado por 15 minutos.
 
 ## API
 
-Rotas sem login: `/`, `/auth/*` e o convite (`GET /contas/convites/:token`,
-`POST /contas/convites/:token/cadastro`). As demais exigem perfil administrador.
+Rotas sem login: `/`, `/auth/entrar`, `/auth/sair` e o convite
+(`GET /contas/convites/:token`, `POST /contas/convites/:token/cadastro`).
+Quem está com senha temporária só acessa `/auth/*` até criar a própria senha.
 
-| Método | Rota | Descrição |
-|---|---|---|
-| GET | `/` | Verificação de saúde |
-| POST | `/auth/entrar` | Login (`email`, `senha`, `manterConectado`); grava o cookie |
-| POST | `/auth/sair` | Encerra a sessão |
-| GET | `/auth/eu` | Usuário logado |
-| GET | `/contas` | Contas ativas |
-| GET | `/publicacoes` | Publicações com dados da conta |
-| POST | `/publicacoes` | Cria (multipart: `imagem`, `texto`, `dataHora`, `conta_id`) |
-| GET | `/publicacoes/:id` | Uma publicação |
+| Método | Rota | Quem | Descrição |
+|---|---|---|---|
+| GET | `/` | todos | Verificação de saúde |
+| POST | `/auth/entrar` | todos | Login (`email`, `senha`, `manterConectado`); grava o cookie |
+| POST | `/auth/sair` | todos | Encerra a sessão |
+| GET | `/auth/eu` | logado | Usuário logado |
+| PATCH | `/auth/eu` | logado | Altera o próprio nome |
+| POST | `/auth/trocar-senha` | logado | `senhaAtual`, `senhaNova` (no 1º acesso, só `senhaNova`) |
+| GET | `/clientes` | admin | Clientes com contadores |
+| POST | `/clientes` | admin | Cria cliente + 1º usuário; devolve a senha temporária |
+| GET | `/clientes/:id` | admin | Usuários e perfis do cliente |
+| PATCH | `/clientes/:id` | admin | `nome`, `ativo` |
+| DELETE | `/clientes/:id` | admin | Exclui de vez cliente, usuários e contas; recusado (409) se alguma conta tiver publicações |
+| POST | `/clientes/:id/usuarios` | admin | Novo usuário (senha temporária) |
+| POST | `/clientes/:id/perfis` | admin | Adiciona um perfil (`nome`, `username`) |
+| POST | `/clientes/:id/link` | admin | Link para o cliente informar o @ (`validadeHoras`: 24, 72 ou 168) |
+| GET | `/perfis` | admin | Perfis ativos com cliente e `status` (`conectado`, `aguardando`, `expirada`) |
+| GET | `/perfis/atencao` | admin | Perfis com sessão expirada |
+| PATCH | `/perfis/:id` | admin | Renomeia (`nome`) |
+| DELETE | `/perfis/:id` | admin | Remove; recusado (409) se o perfil tiver publicações |
+| PATCH | `/usuarios/:id` | admin | `nome`, `email`, `ativo` (só usuários cliente) |
+| POST | `/usuarios/:id/redefinir-senha` | admin | Nova senha temporária |
+| GET | `/minha-area/contas` | cliente | Perfis do cliente, com status da conexão |
+| POST | `/minha-area/contas` | cliente | Informa um perfil (`nome`, `username`) |
+| GET | `/minha-area/publicacoes` | cliente | Publicadas e programadas dos perfis do cliente |
+| GET | `/contas` | admin | Perfis ativos (formato antigo) |
+| POST | `/contas/:id/conectar` | admin | Abre o Chromium para o login no Instagram |
+| GET / DELETE | `/contas/:id/conexao` | admin | Situação da conexão / desconecta |
+| GET | `/publicacoes` | admin | Publicações com dados da conta |
+| POST | `/publicacoes` | admin | Cria (multipart: `imagem`, `texto`, `dataHora`, `conta_id`); publicar agora é recusado (400) se o perfil não estiver conectado |
+| GET | `/publicacoes/:id` | admin | Uma publicação |
 
 Erros seguem o formato `{ "sucesso": false, "mensagem": "..." }`.
+
+**Sessão expirada:** se, ao publicar, o Instagram pedir login ou verificação de
+novo, o perfil é marcado como *Sessão expirada* (`sessao_expirada_em`). Ele aparece
+em vermelho em Clientes, com contador no menu e aviso em Postagens, até ser
+reconectado (a marca é limpa ao conectar, desconectar ou publicar com sucesso).
 
 ## Comentários das publicações
 

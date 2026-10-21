@@ -13,18 +13,18 @@ const contasRepository = require("../repositories/contas.repository");
 const contasService = require("./contas.service");
 const agendador = require("./agendador.service");
 const { executarPublicacao } = require("./publicador.service");
+const { exigirProntoParaPublicar } = require("./perfis.service");
 
 const { STATUS } = publicacoesRepository;
 const log = criarLogger("Publicacoes");
 
 /**
- * Lista as publicações já com nome/username da conta e URL pública da imagem.
+ * Completa publicações com nome/username da conta e URL pública da imagem.
  *
+ * @param {object[]} publicacoes
  * @returns {Promise<object[]>}
  */
-async function listarPublicacoes() {
-    const publicacoes = await publicacoesRepository.listar();
-
+async function completarComConta(publicacoes) {
     if (publicacoes.length === 0) return [];
 
     const idsContas = [...new Set(publicacoes.map((p) => p.conta_id))];
@@ -38,11 +38,42 @@ async function listarPublicacoes() {
             ...publicacao,
             conta: conta?.nome || "",
             username: conta?.username || "",
+            cliente_id: conta?.cliente_id ?? null,
+            cliente: conta?.clientes?.nome || "",
             imagem: publicacao.imagem
                 ? `/uploads/${encodeURIComponent(path.basename(publicacao.imagem))}`
                 : null
         };
     });
+}
+
+/**
+ * Lista as publicações já com nome/username da conta e URL pública da imagem.
+ *
+ * @returns {Promise<object[]>}
+ */
+async function listarPublicacoes() {
+    return completarComConta(await publicacoesRepository.listar());
+}
+
+/** Status que o cliente enxerga (erros técnicos ficam só para o admin). */
+const STATUS_VISIVEIS_AO_CLIENTE = [STATUS.AGENDADA, STATUS.PUBLICANDO, STATUS.PUBLICADA];
+
+/**
+ * Publicações das contas de um cliente (área do cliente): programadas,
+ * em andamento e publicadas. Sem o campo `erro`, que é técnico.
+ *
+ * @param {number} clienteId - SEMPRE vindo da sessão.
+ * @returns {Promise<object[]>}
+ */
+async function listarPublicacoesDoCliente(clienteId) {
+    const contas = await contasRepository.listarPorCliente(clienteId);
+    const publicacoes = await publicacoesRepository.listarPorContas(
+        contas.map((c) => c.id),
+        STATUS_VISIVEIS_AO_CLIENTE
+    );
+
+    return (await completarComConta(publicacoes)).map(({ erro, ...resto }) => resto);
 }
 
 /**
@@ -84,6 +115,10 @@ async function criarPublicacao({ arquivo, texto, contaId, dataHora }) {
 
     const agendada = dataHora.getTime() > Date.now();
 
+    // Publicar agora num perfil desconectado/expirado só geraria erro.
+    // Agendar continua permitido: dá tempo de conectar antes do horário.
+    if (!agendada) exigirProntoParaPublicar(conta);
+
     log.info("Registrando nova publicação", {
         contaId,
         username: conta.username,
@@ -112,4 +147,9 @@ async function criarPublicacao({ arquivo, texto, contaId, dataHora }) {
     return { agendada: false, publicacao, resultado };
 }
 
-module.exports = { listarPublicacoes, buscarPublicacao, criarPublicacao };
+module.exports = {
+    listarPublicacoes,
+    listarPublicacoesDoCliente,
+    buscarPublicacao,
+    criarPublicacao
+};

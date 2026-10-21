@@ -1,8 +1,9 @@
 /**
  * Agrupa todas as rotas da API em um único roteador.
  *
- * Ordem importa: primeiro as rotas públicas; depois `autenticar` +
- * `exigirPerfil("admin")` protegem tudo o que vem abaixo.
+ * Ordem importa: primeiro as rotas públicas; depois cada grupo protegido
+ * declara quem pode usá-lo. Quem está com senha temporária só acessa
+ * `/auth/*` até criar a própria senha.
  */
 const { Router } = require("express");
 
@@ -10,7 +11,15 @@ const authRoutes = require("./auth.routes");
 const convitesPublicosRoutes = require("./convites-publicos.routes");
 const contasRoutes = require("./contas.routes");
 const publicacoesRoutes = require("./publicacoes.routes");
-const { autenticar, exigirPerfil } = require("../middlewares/autenticacao");
+const clientesRoutes = require("./clientes.routes");
+const usuariosRoutes = require("./usuarios.routes");
+const minhaAreaRoutes = require("./minha-area.routes");
+const perfisRoutes = require("./perfis.routes");
+const {
+    autenticar,
+    exigirSenhaDefinitiva,
+    exigirPerfil
+} = require("../middlewares/autenticacao");
 const { PERFIS } = require("../services/auth.service");
 
 const router = Router();
@@ -32,9 +41,18 @@ router.use("/contas/convites", convitesPublicosRoutes);
 
 /* ------------------------- Rotas do administrador ------------------------ */
 
-const somenteAdmin = [autenticar, exigirPerfil(PERFIS.ADMIN)];
+const somenteAdmin = [autenticar, exigirSenhaDefinitiva, exigirPerfil(PERFIS.ADMIN)];
 
 router.use("/contas", ...somenteAdmin, contasRoutes);
 router.use("/publicacoes", ...somenteAdmin, publicacoesRoutes);
+router.use("/clientes", ...somenteAdmin, clientesRoutes);
+router.use("/usuarios", ...somenteAdmin, usuariosRoutes);
+router.use("/perfis", ...somenteAdmin, perfisRoutes);
+
+/* --------------------------- Rotas do cliente ---------------------------- */
+
+const somenteCliente = [autenticar, exigirSenhaDefinitiva, exigirPerfil(PERFIS.CLIENTE)];
+
+router.use("/minha-area", ...somenteCliente, minhaAreaRoutes);
 
 module.exports = router;

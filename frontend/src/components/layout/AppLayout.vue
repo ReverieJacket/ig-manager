@@ -24,12 +24,19 @@
           active-class="active"
         >
           <span class="nav-icon" :class="{ plus: item.icone === '+' }">{{ item.icone }}</span>
-          <span>{{ item.rotulo }}</span>
+          <span class="nav-rotulo">{{ item.rotulo }}</span>
+          <span
+            v-if="item.alerta && totalEmAtencao > 0"
+            class="nav-alerta"
+            :title="`${totalEmAtencao} perfil(is) com sessão expirada`"
+          >{{ totalEmAtencao }}</span>
         </router-link>
       </nav>
 
       <div v-if="usuario" class="usuario">
-        <div class="avatar" :class="usuario.perfil" aria-hidden="true">{{ iniciais }}</div>
+        <router-link to="/meu-perfil" class="avatar" :class="usuario.perfil" title="Meu perfil">
+          {{ iniciais }}
+        </router-link>
         <div class="usuario-dados">
           <strong>{{ usuario.nome }}</strong>
           <span>{{ ehAdmin ? "Administrador" : "Cliente" }}</span>
@@ -47,22 +54,40 @@
 </template>
 
 <script setup>
-import { computed, ref } from "vue";
-import { useRouter } from "vue-router";
+import { computed, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 
+import { useAlertasPerfis } from "../../composables/useAlertasPerfis";
 import { useSessao } from "../../composables/useSessao";
 
 const router = useRouter();
+const route = useRoute();
 const { usuario, ehAdmin, sair } = useSessao();
+const { totalEmAtencao, atualizar: atualizarAlertas } = useAlertasPerfis();
 const saindo = ref(false);
+
+// Perfis com sessão expirada: conferidos a cada troca de tela (no máximo
+// uma consulta a cada 30 s), só para o administrador.
+watch(
+  () => route.fullPath,
+  () => {
+    if (ehAdmin.value) atualizarAlertas();
+  },
+  { immediate: true }
+);
 
 const MENU_ADMIN = [
   { para: "/postagens", icone: "⌂", rotulo: "Postagens" },
-  { para: "/contas", icone: "◎", rotulo: "Contas" },
+  { para: "/clientes", icone: "☺", rotulo: "Clientes", alerta: true },
   { para: "/criar", icone: "+", rotulo: "Criar" },
 ];
 
-const MENU_CLIENTE = [{ para: "/cliente", icone: "⌂", rotulo: "Minhas postagens" }];
+// "Aprovações" entra aqui na etapa 3.
+const MENU_CLIENTE = [
+  { para: "/minhas-postagens", icone: "⌂", rotulo: "Minhas postagens" },
+  { para: "/meus-perfis", icone: "◎", rotulo: "Meus perfis" },
+  { para: "/meu-perfil", icone: "☺", rotulo: "Meu perfil" },
+];
 
 const itensMenu = computed(() => (ehAdmin.value ? MENU_ADMIN : MENU_CLIENTE));
 
@@ -174,6 +199,19 @@ async function sairDoSistema() {
   font-size: 18px;
 }
 
+.nav-alerta {
+  min-width: 20px;
+  margin-left: auto;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: #d0352a;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+
 .nav-icon.plus {
   font-size: 22px;
 }
@@ -224,6 +262,7 @@ async function sairDoSistema() {
   color: #444;
   font-size: 13px;
   font-weight: 700;
+  text-decoration: none;
 }
 
 .avatar.cliente {
@@ -283,7 +322,7 @@ async function sairDoSistema() {
   }
 
   .logo span,
-  .nav-item span:last-child,
+  .nav-item .nav-rotulo,
   .perfil-tag,
   .usuario-dados {
     display: none;
@@ -303,9 +342,20 @@ async function sairDoSistema() {
   }
 
   .nav-item {
+    position: relative;
     justify-content: center;
     width: 48px;
     padding: 0;
+  }
+
+  .nav-alerta {
+    position: absolute;
+    top: 4px;
+    right: 2px;
+    min-width: 16px;
+    padding: 0 4px;
+    font-size: 10px;
+    line-height: 16px;
   }
 
   .main-content {

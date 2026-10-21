@@ -18,6 +18,36 @@ export async function entrar(dados) {
   return usuario;
 }
 
+/**
+ * Troca a própria senha. No primeiro acesso `senhaAtual` pode ficar vazia.
+ *
+ * @param {{senhaAtual?: string, senhaNova: string}} dados
+ * @returns {Promise<object>} Usuário atualizado.
+ */
+export async function trocarSenha(dados) {
+  const { usuario } = await requisicao("/auth/trocar-senha", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(dados),
+  });
+  return usuario;
+}
+
+/**
+ * Altera o próprio nome.
+ *
+ * @param {{nome: string}} dados
+ * @returns {Promise<object>} Usuário atualizado.
+ */
+export async function atualizarPerfil(dados) {
+  const { usuario } = await requisicao("/auth/eu", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(dados),
+  });
+  return usuario;
+}
+
 /** Encerra a sessão (apaga o cookie). */
 export function sair() {
   return requisicao("/auth/sair", { method: "POST" });

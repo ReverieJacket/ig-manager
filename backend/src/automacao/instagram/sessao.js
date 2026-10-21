@@ -73,30 +73,37 @@ async function restaurarSessao(contexto, contaId) {
     }
 }
 
+/** Código anexado ao erro quando o Instagram pede login de novo. */
+const SESSAO_INVALIDA = "SESSAO_INVALIDA";
+
+/** Cria um erro marcado como "sessão do Instagram não vale mais". */
+function erroSessao(mensagem) {
+    const erro = new Error(mensagem);
+    erro.codigo = SESSAO_INVALIDA;
+    return erro;
+}
+
 /**
  * Confirma que a página não está na tela de login/verificação.
  *
  * @param {import("playwright").Page} pagina
- * @throws {Error} Se o Instagram pediu login ou verificação manual.
+ * @throws {Error} Com `codigo = "SESSAO_INVALIDA"` se o Instagram pediu
+ *   login ou verificação manual (o perfil precisa ser reconectado).
  */
 async function verificarLogin(pagina) {
     if (URL_VERIFICACAO.test(pagina.url())) {
-        throw new Error(
-            "O Instagram solicitou login ou verificação manual. " +
-            "Atualize a sessão antes de continuar."
+        throw erroSessao(
+            "O Instagram pediu login ou verificação de novo. Reconecte o perfil."
         );
     }
 
     const campo = pagina.locator(CAMPOS_LOGIN).first();
 
     if (await campo.isVisible().catch(() => false)) {
-        throw new Error(
-            "A sessão não está autenticada. " +
-            "Execute `npm run login:instagram` e tente novamente."
-        );
+        throw erroSessao("A sessão do Instagram expirou. Reconecte o perfil.");
     }
 
     log.info("Nenhum formulário de login identificado.");
 }
 
-module.exports = { restaurarSessao, verificarLogin, obterArquivoSessao };
+module.exports = { restaurarSessao, verificarLogin, obterArquivoSessao, SESSAO_INVALIDA };

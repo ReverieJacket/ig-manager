@@ -68,7 +68,13 @@ async function principal() {
     const senha_hash = await gerarHash(senha);
 
     if (existente) {
-        await usuariosRepository.atualizar(existente.id, { senha_hash, ativo: true });
+        // Nova versão de sessão: quem estava logado com a senha antiga é desconectado.
+        await usuariosRepository.atualizar(existente.id, {
+            senha_hash,
+            ativo: true,
+            senha_temporaria: false,
+            sessao_versao: (existente.sessao_versao || 1) + 1
+        });
         console.log(`Senha do administrador ${email} redefinida.`);
     } else {
         await usuariosRepository.criar({ nome, email, senha_hash, perfil: "admin", cliente_id: null });
