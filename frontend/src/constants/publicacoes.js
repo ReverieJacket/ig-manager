@@ -5,8 +5,9 @@
 
 /**
  * Status possíveis de uma publicação (mesmos valores gravados pelo backend).
- * `rascunho` e `recusada` ainda não são gerados pelo backend, mas já têm
- * abas e contadores na tela de postagens.
+ * `recusada` = indeferida pelo cliente (não será publicada); `cancelada` =
+ * cancelada pelo administrador (aparece em "Todas"). `rascunho`
+ * ainda não é gerado pelo backend.
  */
 export const STATUS = Object.freeze({
   RASCUNHO: "rascunho",
@@ -15,6 +16,7 @@ export const STATUS = Object.freeze({
   PUBLICADA: "publicada",
   ERRO: "erro",
   RECUSADA: "recusada",
+  CANCELADA: "cancelada",
 });
 
 /** Texto exibido para cada status. */
@@ -25,17 +27,39 @@ export const ROTULOS_STATUS = Object.freeze({
   [STATUS.PUBLICADA]: "Publicada",
   [STATUS.ERRO]: "Com erro",
   [STATUS.RECUSADA]: "Recusada",
+  [STATUS.CANCELADA]: "Cancelada",
 });
 
 /** Valor especial da aba que não filtra por status. */
 export const FILTRO_TODAS = "todas";
+
+/**
+ * Aba/contador "Aguardando cliente": agendadas com aprovação pendente
+ * (não é um status, é calculado em `usePublicacoes`).
+ */
+export const FILTRO_AGUARDANDO = "aguardando_cliente";
+
+/** Resposta do cliente (coluna `aprovacao`). */
+export const APROVACAO = Object.freeze({
+  PENDENTE: "pendente",
+  DEFERIDA: "deferida",
+  INDEFERIDA: "indeferida",
+});
+
+/** Motivos do indeferimento (mesmas chaves do backend). */
+export const CATEGORIAS_INDEFERIMENTO = Object.freeze([
+  { valor: "texto", rotulo: "Texto / informação errada" },
+  { valor: "imagem", rotulo: "Imagem" },
+  { valor: "data", rotulo: "Data / horário" },
+  { valor: "nao_quero", rotulo: "Não quero este post" },
+]);
 
 /** Abas de filtro da tela de postagens. */
 export const ABAS_FILTRO = Object.freeze([
   { valor: FILTRO_TODAS, rotulo: "Todas" },
   { valor: STATUS.PUBLICADA, rotulo: "Publicadas" },
   { valor: STATUS.AGENDADA, rotulo: "Agendadas" },
-  { valor: STATUS.RASCUNHO, rotulo: "Rascunhos" },
+  { valor: FILTRO_AGUARDANDO, rotulo: "Aguardando cliente" },
   { valor: STATUS.ERRO, rotulo: "Com erro" },
   { valor: STATUS.RECUSADA, rotulo: "Recusadas" },
 ]);

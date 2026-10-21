@@ -73,6 +73,12 @@ const routes = [
         meta: { titulo: "Minhas postagens", perfil: PERFIS.CLIENTE },
       },
       {
+        path: "aprovacoes",
+        name: "aprovacoes",
+        component: () => import("../views/AprovacoesView.vue"),
+        meta: { titulo: "Aprovações", perfil: PERFIS.CLIENTE },
+      },
+      {
         path: "meus-perfis",
         name: "meus-perfis",
         component: () => import("../views/MeusPerfisView.vue"),

@@ -14,8 +14,9 @@ const contasService = require("./contas.service");
 const agendador = require("./agendador.service");
 const { executarPublicacao } = require("./publicador.service");
 const { exigirProntoParaPublicar } = require("./perfis.service");
+const { comAutorDaResposta } = require("./aprovacoes.service");
 
-const { STATUS } = publicacoesRepository;
+const { STATUS, APROVACAO } = publicacoesRepository;
 const log = criarLogger("Publicacoes");
 
 /**
@@ -53,7 +54,7 @@ async function completarComConta(publicacoes) {
  * @returns {Promise<object[]>}
  */
 async function listarPublicacoes() {
-    return completarComConta(await publicacoesRepository.listar());
+    return comAutorDaResposta(await completarComConta(await publicacoesRepository.listar()));
 }
 
 /** Status que o cliente enxerga (erros técnicos ficam só para o admin). */
@@ -126,14 +127,24 @@ async function criarPublicacao({ arquivo, texto, contaId, dataHora }) {
         agendada
     });
 
-    const publicacao = await publicacoesRepository.criar({
-        conta_id: contaId,
-        imagem: arquivo.filename,
-        texto,
-        data_hora: dataHora.toISOString(),
-        status: agendada ? STATUS.AGENDADA : STATUS.PUBLICANDO,
-        erro: null
-    });
+    let publicacao;
+    try {
+        publicacao = await publicacoesRepository.criar({
+            conta_id: contaId,
+            imagem: arquivo.filename,
+            texto,
+            data_hora: dataHora.toISOString(),
+            status: agendada ? STATUS.AGENDADA : STATUS.PUBLICANDO,
+            // Agendada passa pela aprovação do cliente; publicar agora, não.
+            ...(agendada ? { aprovacao: APROVACAO.PENDENTE } : {}),
+            erro: null
+        });
+    } catch (erro) {
+        if (/aprovacao/.test(erro?.message || "")) {
+            throw new ErroHttp(500, "Aprovações indisponíveis: execute a migração 008 no Supabase.");
+        }
+        throw erro;
+    }
 
     log.info(`Publicação registrada: ${publicacao.id}`);
 
@@ -147,7 +158,59 @@ async function criarPublicacao({ arquivo, texto, contaId, dataHora }) {
     return { agendada: false, publicacao, resultado };
 }
 
+/** Status que o administrador pode cancelar. */
+const STATUS_CANCELAVEIS = [STATUS.AGENDADA, STATUS.RECUSADA];
+
+/**
+ * Cancela uma publicação agendada (ou recusada). Não apaga: o status vira
+ * `cancelada`, com quem e quando, e o agendamento é desfeito.
+ *
+ * @param {number} id
+ * @param {{id: number}} admin - Usuário da sessão.
+ * @returns {Promise<object>} A publicação atualizada.
+ */
+async function cancelarPublicacao(id, admin) {
+    const publicacao = await buscarPublicacao(id);
+
+    if (publicacao.status === STATUS.CANCELADA) {
+        throw new ErroHttp(409, "Esta publicação já foi cancelada.");
+    }
+
+    if (!STATUS_CANCELAVEIS.includes(publicacao.status)) {
+        throw new ErroHttp(409, "Só dá para cancelar publicações agendadas que ainda não saíram.");
+    }
+
+    let atualizada;
+    try {
+        atualizada = await publicacoesRepository.atualizarSeStatus(
+            id,
+            {
+                status: STATUS.CANCELADA,
+                cancelada_por: admin.id,
+                cancelada_em: new Date().toISOString()
+            },
+            STATUS_CANCELAVEIS
+        );
+    } catch (erro) {
+        if (/cancelada|check constraint|violates/i.test(erro?.message || "")) {
+            throw new ErroHttp(500, "Cancelamento indisponível: execute a migração 009 no Supabase.");
+        }
+        throw erro;
+    }
+
+    if (!atualizada) {
+        throw new ErroHttp(409, "A publicação acabou de começar a sair e não pode mais ser cancelada.");
+    }
+
+    agendador.cancelar(id);
+    log.info(`Publicação ${id} cancelada`, { por: admin.id });
+
+    return atualizada;
+}
+
 module.exports = {
+    cancelarPublicacao,
+    completarComConta,
     listarPublicacoes,
     listarPublicacoesDoCliente,
     buscarPublicacao,

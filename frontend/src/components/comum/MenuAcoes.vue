@@ -1,7 +1,11 @@
 <!--
   Botão "⋯" que abre um menu de ações.
-  `itens`: [{ rotulo, acao, perigo?, separadorAntes?, desabilitado? }].
-  Fecha ao escolher, ao clicar fora ou com Esc.
+  `itens`: [{ rotulo, acao, perigo?, separadorAntes?, desabilitado? }]
+  ou { titulo } para um cabeçalho de grupo (não clicável).
+  Fecha ao escolher, ao clicar fora, com Esc ou ao rolar a página.
+
+  O menu usa posição fixa (calculada a partir do botão) para não ser
+  cortado por tabelas com rolagem; abre para cima perto do rodapé.
 -->
 <template>
   <div ref="raiz" class="menu-acoes">
@@ -13,15 +17,17 @@
       aria-haspopup="menu"
       :aria-label="rotulo"
       :title="rotulo"
-      @click.stop="aberto = !aberto"
+      @click.stop="alternar"
     >
       ⋯
     </button>
 
-    <div v-if="aberto" class="menu" role="menu">
+    <div v-if="aberto" class="menu" role="menu" :style="posicao">
       <template v-for="(item, i) in itens" :key="i">
         <hr v-if="item.separadorAntes" />
+        <div v-if="item.titulo" class="titulo">{{ item.titulo }}</div>
         <button
+          v-else
           type="button"
           role="menuitem"
           class="item"
@@ -48,6 +54,28 @@ defineProps({
 
 const aberto = ref(false);
 const raiz = ref(null);
+const posicao = ref({});
+
+/** Altura aproximada do menu, para decidir se abre para cima. */
+const ALTURA_ESTIMADA = 44 * 4;
+
+function alternar() {
+  if (aberto.value) {
+    aberto.value = false;
+    return;
+  }
+  const r = raiz.value.getBoundingClientRect();
+  const direita = `${Math.max(8, window.innerWidth - r.right)}px`;
+  posicao.value =
+    r.bottom + ALTURA_ESTIMADA > window.innerHeight
+      ? { bottom: `${window.innerHeight - r.top + 6}px`, right: direita }
+      : { top: `${r.bottom + 6}px`, right: direita };
+  aberto.value = true;
+}
+
+function fecharAoRolar() {
+  aberto.value = false;
+}
 
 function escolher(item) {
   aberto.value = false;
@@ -65,10 +93,14 @@ function aoTeclar(evento) {
 onMounted(() => {
   document.addEventListener("click", aoClicarFora);
   document.addEventListener("keydown", aoTeclar);
+  window.addEventListener("scroll", fecharAoRolar, true);
+  window.addEventListener("resize", fecharAoRolar);
 });
 onBeforeUnmount(() => {
   document.removeEventListener("click", aoClicarFora);
   document.removeEventListener("keydown", aoTeclar);
+  window.removeEventListener("scroll", fecharAoRolar, true);
+  window.removeEventListener("resize", fecharAoRolar);
 });
 </script>
 
@@ -107,11 +139,9 @@ onBeforeUnmount(() => {
 }
 
 .menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 30;
-  width: 210px;
+  position: fixed;
+  z-index: 60;
+  width: 220px;
   padding: 6px;
   border: 1px solid #e2e2e2;
   border-radius: 10px;
@@ -143,6 +173,14 @@ onBeforeUnmount(() => {
 
 .item.perigo {
   color: var(--cor-erro-texto);
+}
+
+.titulo {
+  padding: 6px 12px 3px;
+  color: #999;
+  font-size: 11px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
 }
 
 hr {
