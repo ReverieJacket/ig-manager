@@ -65,13 +65,17 @@ npm run dev:frontend                   # http://localhost:5173
 - `contas_instagram` (perfis do Instagram): `id`, `nome`, `username`, `ativo`, `cliente_id`,
   `sessao_expirada_em`, `sessao_erro` (preenchidos quando o Instagram pede login de novo)
 - `publicacoes`: `id`, `conta_id`, `imagem`, `texto`, `data_hora`, `status`, `erro`
-  - `status`: `agendada` → `publicando` → `publicada` | `erro`
+  - `status`: `agendada` → `publicando` → `publicada` | `erro`; `agendada` ⇄ `recusada`
+    (indeferida pelo cliente)
+  - aprovação (migração 008): `aprovacao` (`pendente` | `deferida` | `indeferida`; nula =
+    publicada na hora), `aprovacao_por`, `aprovacao_pela_equipe`, `aprovacao_em`,
+    `aprovacao_categoria`, `aprovacao_motivo`
 
 ## Perfis de acesso
 
 Todo acesso exige login, exceto o link de convite. Execute no Supabase as migrações
 `004_clientes_usuarios.sql`, `005_area_cliente.sql`, `006_excluir_cliente.sql` e
-`007_sessao_expirada.sql` e crie o primeiro administrador
+`007_sessao_expirada.sql`, `008_aprovacoes.sql`, `009_cancelar_publicacao.sql` e crie o primeiro administrador
 com `npm run criar:admin` (rodar de novo com o mesmo e-mail redefine a senha).
 
 - **Administrador:** Postagens, **Clientes** e Criar. Em *Clientes* fica tudo de cada
@@ -84,8 +88,9 @@ com `npm run criar:admin` (rodar de novo com o mesmo e-mail redefine a senha).
   O cabeçalho do cliente permite renomear, desativar e excluir (lixeira). Em *Criar*
   os perfis aparecem agrupados por cliente, com "Todos os perfis conectados".
 - **Cliente** (dono do Instagram): *Minhas postagens* (publicadas e programadas,
-  só leitura), *Meus perfis* (informa o @, sem senha) e *Meu perfil*. Vê apenas
-  os dados do próprio cliente. "Aprovações" chega na próxima etapa.
+  só leitura), *Meus perfis* (informa o @, sem senha, e conecta o perfil — ver `CONEXAO_PELO_CLIENTE`) e *Meu perfil*. Vê apenas
+  os dados do próprio cliente. Em *Aprovações* defere ou indefere (com motivo) os
+  posts agendados, e pode mudar a resposta até o horário.
 
 **Senhas:** o administrador nunca define nem vê a senha de um cliente. Ao criar um
 usuário ou redefinir a senha, o sistema gera uma **senha temporária** (mostrada uma
@@ -126,15 +131,35 @@ Quem está com senha temporária só acessa `/auth/*` até criar a própria senh
 | POST | `/usuarios/:id/redefinir-senha` | admin | Nova senha temporária |
 | GET | `/minha-area/contas` | cliente | Perfis do cliente, com status da conexão |
 | POST | `/minha-area/contas` | cliente | Informa um perfil (`nome`, `username`) |
+| POST | `/minha-area/contas/:id/conectar` | cliente | Abre o Chromium para o login no Instagram (só perfis do próprio cliente; requer `CONEXAO_PELO_CLIENTE`) |
+| GET | `/minha-area/contas/:id/conexao` | cliente | Andamento da conexão |
 | GET | `/minha-area/publicacoes` | cliente | Publicadas e programadas dos perfis do cliente |
+| GET | `/minha-area/aprovacoes` | cliente | `{ pendentes, respondidas }` |
+| POST | `/minha-area/aprovacoes/:id` | cliente | `{ decisao: "deferida" \| "indeferida", categoria, motivo }` |
+| POST | `/minha-area/aprovacoes/deferir` | cliente | `{ ids }`: defere várias |
 | GET | `/contas` | admin | Perfis ativos (formato antigo) |
 | POST | `/contas/:id/conectar` | admin | Abre o Chromium para o login no Instagram |
 | GET / DELETE | `/contas/:id/conexao` | admin | Situação da conexão / desconecta |
 | GET | `/publicacoes` | admin | Publicações com dados da conta |
-| POST | `/publicacoes` | admin | Cria (multipart: `imagem`, `texto`, `dataHora`, `conta_id`); publicar agora é recusado (400) se o perfil não estiver conectado |
+| POST | `/publicacoes` | admin | Cria (multipart: `imagem`, `texto`, `dataHora`, `conta_id`); publicar agora é recusado (400) se o perfil não estiver conectado; agendada nasce com aprovação pendente |
+| POST | `/publicacoes/:id/cancelar` | admin | Cancela uma agendada/recusada (vira `cancelada`; não apaga) |
+| POST | `/publicacoes/:id/aprovacao` | admin | Responde em nome do cliente (mesmo corpo do cliente) |
 | GET | `/publicacoes/:id` | admin | Uma publicação |
 
 Erros seguem o formato `{ "sucesso": false, "mensagem": "..." }`.
+
+**Aprovações:** toda publicação *agendada* passa pela aprovação do cliente; *publicar
+agora* não. Sem resposta até o horário, publica. Indeferida não é publicada (vira
+*Recusada*); para mudar o conteúdo, crie outra publicação. O cliente pode trocar a
+resposta até o horário, e o administrador pode responder em nome dele (fica
+registrado como "pela equipe"). No horário, o agendador relê o banco e pula as recusadas.
+O administrador também pode **cancelar** uma agendada (menu ⋯ em Postagens): ela vira
+*Cancelada*, fica no histórico e o cliente vê "Cancelada pela equipe".
+
+**Conexão pelo cliente:** com `CONEXAO_PELO_CLIENTE=true` (padrão) o cliente vê o
+botão *Conectar* em *Meus perfis*. O Chromium abre **no computador do backend**, então
+isso só faz sentido com tudo na mesma máquina; em servidor, use `false` até existir
+um navegador remoto. Desconectar continua só com o administrador.
 
 **Sessão expirada:** se, ao publicar, o Instagram pedir login ou verificação de
 novo, o perfil é marcado como *Sessão expirada* (`sessao_expirada_em`). Ele aparece

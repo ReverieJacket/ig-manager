@@ -1,6 +1,6 @@
 <!--
-  Minhas postagens (cliente): publicações programadas e publicadas das
-  contas do cliente, só para leitura. A aprovação chega na etapa 3.
+  Minhas postagens (cliente): publicações programadas e publicadas dos
+  perfis do cliente, só para leitura. Deferir/indeferir fica em Aprovações.
 -->
 <template>
   <div class="page">

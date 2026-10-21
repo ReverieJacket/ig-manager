@@ -17,12 +17,24 @@ const COLUNAS = "*";
 /**
  * Ciclo de vida de uma publicação.
  * `agendada` -> `publicando` -> `publicada` | `erro`
+ * `agendada` <-> `recusada` (indeferida pelo cliente; volta se ele deferir
+ * antes do horário).
+ * `agendada` | `recusada` -> `cancelada` (cancelada pelo administrador).
  */
 const STATUS = Object.freeze({
     AGENDADA: "agendada",
     PUBLICANDO: "publicando",
     PUBLICADA: "publicada",
-    ERRO: "erro"
+    ERRO: "erro",
+    RECUSADA: "recusada",
+    CANCELADA: "cancelada"
+});
+
+/** Resposta do cliente a uma publicação agendada (coluna `aprovacao`). */
+const APROVACAO = Object.freeze({
+    PENDENTE: "pendente",
+    DEFERIDA: "deferida",
+    INDEFERIDA: "indeferida"
 });
 
 /**
@@ -157,8 +169,57 @@ async function atualizar(id, campos) {
     return data;
 }
 
+/**
+ * Publicações que passam por aprovação, de um conjunto de perfis, com
+ * horário a partir de `desde` (tela Aprovações do cliente).
+ *
+ * @param {number[]} contaIds
+ * @param {string} desde - ISO 8601.
+ * @returns {Promise<object[]>} Da mais próxima para a mais distante.
+ */
+async function listarComAprovacao(contaIds, desde) {
+    if (contaIds.length === 0) return [];
+
+    const { data, error } = await supabase
+        .from(TABELA)
+        .select(COLUNAS)
+        .in("conta_id", contaIds)
+        .not("aprovacao", "is", null)
+        .gte("data_hora", desde)
+        .order("data_hora", { ascending: true });
+
+    if (error) throw error;
+
+    return data || [];
+}
+
+/**
+ * Atualiza a publicação SÓ se o status ainda for um dos permitidos.
+ * Evita mudar a resposta de algo que o agendador acabou de começar a
+ * publicar (as duas coisas podem acontecer no mesmo instante).
+ *
+ * @returns {Promise<object|null>} O registro atualizado, ou `null` se o
+ *   status já não era permitido.
+ */
+async function atualizarSeStatus(id, campos, statusPermitidos) {
+    const { data, error } = await supabase
+        .from(TABELA)
+        .update(campos)
+        .eq("id", id)
+        .in("status", statusPermitidos)
+        .select()
+        .maybeSingle();
+
+    if (error) throw error;
+
+    return data;
+}
+
 module.exports = {
     STATUS,
+    APROVACAO,
+    listarComAprovacao,
+    atualizarSeStatus,
     listar,
     listarPorContas,
     existeParaConta,
