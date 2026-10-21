@@ -26,10 +26,11 @@
           <span class="nav-icon" :class="{ plus: item.icone === '+' }">{{ item.icone }}</span>
           <span class="nav-rotulo">{{ item.rotulo }}</span>
           <span
-            v-if="item.alerta && totalEmAtencao > 0"
+            v-if="contadorDe(item) > 0"
             class="nav-alerta"
-            :title="`${totalEmAtencao} perfil(is) com sessão expirada`"
-          >{{ totalEmAtencao }}</span>
+            :class="item.contador"
+            :title="tituloContador(item)"
+          >{{ contadorDe(item) }}</span>
         </router-link>
       </nav>
 
@@ -58,33 +59,49 @@ import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
 import { useAlertasPerfis } from "../../composables/useAlertasPerfis";
+import { useAprovacoesPendentes } from "../../composables/useAprovacoesPendentes";
 import { useSessao } from "../../composables/useSessao";
 
 const router = useRouter();
 const route = useRoute();
 const { usuario, ehAdmin, sair } = useSessao();
 const { totalEmAtencao, atualizar: atualizarAlertas } = useAlertasPerfis();
+const { totalPendentes, atualizar: atualizarAprovacoes } = useAprovacoesPendentes();
 const saindo = ref(false);
 
-// Perfis com sessão expirada: conferidos a cada troca de tela (no máximo
-// uma consulta a cada 30 s), só para o administrador.
+// Contadores do menu, conferidos a cada troca de tela (no máximo uma
+// consulta a cada 30 s): perfis com sessão expirada (administrador) e
+// aprovações pendentes (cliente).
 watch(
   () => route.fullPath,
   () => {
     if (ehAdmin.value) atualizarAlertas();
+    else atualizarAprovacoes();
   },
   { immediate: true }
 );
 
+function contadorDe(item) {
+  if (item.contador === "atencao") return totalEmAtencao.value;
+  if (item.contador === "aprovacoes") return totalPendentes.value;
+  return 0;
+}
+
+function tituloContador(item) {
+  return item.contador === "atencao"
+    ? `${totalEmAtencao.value} perfil(is) com sessão expirada`
+    : `${totalPendentes.value} post(s) esperando a sua resposta`;
+}
+
 const MENU_ADMIN = [
   { para: "/postagens", icone: "⌂", rotulo: "Postagens" },
-  { para: "/clientes", icone: "☺", rotulo: "Clientes", alerta: true },
+  { para: "/clientes", icone: "☺", rotulo: "Clientes", contador: "atencao" },
   { para: "/criar", icone: "+", rotulo: "Criar" },
 ];
 
-// "Aprovações" entra aqui na etapa 3.
 const MENU_CLIENTE = [
   { para: "/minhas-postagens", icone: "⌂", rotulo: "Minhas postagens" },
+  { para: "/aprovacoes", icone: "✓", rotulo: "Aprovações", contador: "aprovacoes" },
   { para: "/meus-perfis", icone: "◎", rotulo: "Meus perfis" },
   { para: "/meu-perfil", icone: "☺", rotulo: "Meu perfil" },
 ];
@@ -210,6 +227,10 @@ async function sairDoSistema() {
   font-weight: 700;
   line-height: 18px;
   text-align: center;
+}
+
+.nav-alerta.aprovacoes {
+  background: #dd2a7b;
 }
 
 .nav-icon.plus {

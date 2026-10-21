@@ -39,3 +39,22 @@ export function criarPublicacao({ imagem, texto, dataHora, contaId }) {
 
   return requisicao("/publicacoes", { method: "POST", body: formulario });
 }
+
+/**
+ * Administrador responde a aprovação EM NOME DO CLIENTE.
+ *
+ * @param {number} id
+ * @param {{decisao: "deferida"|"indeferida", categoria?: string, motivo?: string}} dados
+ */
+export function responderPeloCliente(id, dados) {
+  return requisicao(`/publicacoes/${id}/aprovacao`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(dados),
+  });
+}
+
+/** Cancela uma publicação agendada/recusada (não apaga; vira "Cancelada"). */
+export function cancelarPublicacao(id) {
+  return requisicao(`/publicacoes/${id}/cancelar`, { method: "POST" });
+}

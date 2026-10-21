@@ -10,7 +10,7 @@ const { formatarErro } = require("../lib/erros");
 const publicacoesRepository = require("../repositories/publicacoes.repository");
 const { executarPublicacao } = require("./publicador.service");
 
-const { STATUS } = publicacoesRepository;
+const { STATUS, APROVACAO } = publicacoesRepository;
 const log = criarLogger("Agendador");
 
 /** Maior atraso suportado por `setTimeout` no Node.js (2^31 - 1 ms ≈ 24,8 dias). */
@@ -42,6 +42,32 @@ function cancelar(id) {
 }
 
 /**
+ * Publica se, NO HORÁRIO, a publicação ainda estiver agendada.
+ *
+ * Relê o banco porque o cliente pode ter indeferido (status `recusada`)
+ * ou mudado a resposta depois que o timer foi criado. Sem resposta
+ * (`aprovacao` = pendente) ou deferida: publica.
+ *
+ * @param {{id: number}} publicacao
+ */
+async function executarSeAindaAgendada(publicacao) {
+    const id = publicacao.id;
+    const atual = await publicacoesRepository.buscarPorId(id);
+
+    if (!atual || atual.status !== STATUS.AGENDADA) {
+        log.info(`Publicação ${id} não será publicada: status atual "${atual?.status ?? "removida"}".`);
+        return;
+    }
+
+    if (atual.aprovacao === APROVACAO.INDEFERIDA) {
+        log.info(`Publicação ${id} não será publicada: indeferida pelo cliente.`);
+        return;
+    }
+
+    await executarPublicacao(atual);
+}
+
+/**
  * Agenda a execução de uma publicação para `publicacao.data_hora`.
  *
  * - Data já passada: executa imediatamente.
@@ -58,7 +84,7 @@ function agendar(publicacao) {
     cancelar(id);
 
     if (!Number.isFinite(espera) || espera <= 0) {
-        executarPublicacao(publicacao).catch((erro) => {
+        executarSeAindaAgendada(publicacao).catch((erro) => {
             log.erro(`Erro inesperado no agendamento ${id}`, formatarErro(erro));
         });
         return;
@@ -80,7 +106,7 @@ function agendar(publicacao) {
             return;
         }
 
-        executarPublicacao(publicacao).catch((erro) => {
+        executarSeAindaAgendada(publicacao).catch((erro) => {
             log.erro(`Erro inesperado no agendamento ${id}`, formatarErro(erro));
         });
     }, proximoPasso);

@@ -72,6 +72,14 @@ const config = {
         logs: path.join(DIRETORIO_STORAGE, "logs")
     },
 
+    /**
+     * Se o cliente pode conectar o próprio perfil em "Meus perfis".
+     * O Chromium abre na máquina do BACKEND: funciona com tudo no mesmo
+     * computador; num servidor (EC2) desligue com CONEXAO_PELO_CLIENTE=false
+     * até existir o navegador remoto. Padrão: ligado.
+     */
+    conexaoPeloCliente: process.env.CONEXAO_PELO_CLIENTE !== "false",
+
     upload: {
         tamanhoMaximoBytes: 15 * 1024 * 1024,
         tiposPermitidos: ["image/jpeg", "image/png", "image/webp"]

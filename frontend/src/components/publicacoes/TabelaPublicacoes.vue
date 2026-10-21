@@ -11,6 +11,7 @@
           <th>Legenda</th>
           <th>Perfil</th>
           <th>Status</th>
+          <th>Aprovação do cliente</th>
           <th>Data/Hora</th>
           <th>Engajamento</th>
           <th>Cliente</th>
@@ -40,6 +41,23 @@
               class="motivo-erro"
               :title="post.erro"
             >{{ post.erro }}</small>
+          </td>
+
+          <td class="aprovacao">
+            <template v-if="normalizarStatus(post.status) === STATUS.CANCELADA">
+              <span class="status cancelada">Cancelada</span>
+              <small>pela equipe{{ post.cancelada_por_nome ? ` (${post.cancelada_por_nome})` : "" }}{{ post.cancelada_em ? ` · ${formatarData(post.cancelada_em)}` : "" }}</small>
+            </template>
+            <template v-else-if="post.aprovacao">
+              <span class="status" :class="aprovacaoDe(post).classe">{{ aprovacaoDe(post).rotulo }}</span>
+              <small :class="{ 'motivo-erro': post.aprovacao === APROVACAO.INDEFERIDA }" :title="aprovacaoDe(post).detalhe">
+                {{ aprovacaoDe(post).detalhe }}
+              </small>
+            </template>
+            <template v-else>
+              <span class="status">Não requer</span>
+              <small>publicada na hora</small>
+            </template>
           </td>
 
           <td>{{ formatarData(post.data_hora) }}</td>
@@ -76,7 +94,11 @@
           <td>{{ post.cliente || "—" }}</td>
 
           <td>
-            <button class="action-button" type="button">⋮</button>
+            <MenuAcoes
+              v-if="podeResponder(post) || podeCancelar(post)"
+              :itens="acoesDe(post)"
+              rotulo="Ações da publicação"
+            />
           </td>
         </tr>
       </tbody>
@@ -85,7 +107,8 @@
 </template>
 
 <script setup>
-import { STATUS } from "../../constants/publicacoes";
+import MenuAcoes from "../comum/MenuAcoes.vue";
+import { APROVACAO, STATUS } from "../../constants/publicacoes";
 import {
   formatarCurtidas,
   formatarData,
@@ -98,12 +121,81 @@ import {
  *   formato devolvido por `api/publicacoes.js`.
  * @event comentarios - O usuário clicou no ícone de comentários; envia a
  *   publicação da linha.
+ * @event aprovacao - "Deferir/Indeferir pelo cliente": `{ publicacao, decisao }`.
+ * @event cancelar - "Cancelar publicação": envia a publicação.
  */
 defineProps({
   publicacoes: { type: Array, required: true },
 });
 
-const emit = defineEmits(["comentarios"]);
+const emit = defineEmits(["comentarios", "aprovacao", "cancelar"]);
+
+/** Agendada ou recusada (ainda não saiu): o administrador pode cancelar. */
+function podeCancelar(post) {
+  return [STATUS.AGENDADA, STATUS.RECUSADA].includes(normalizarStatus(post.status));
+}
+
+function acoesDe(post) {
+  const itens = podeResponder(post) ? acoesAprovacao(post) : [];
+  if (podeCancelar(post)) {
+    itens.push({
+      rotulo: "⊘ Cancelar publicação",
+      acao: () => emit("cancelar", post),
+      perigo: true,
+      separadorAntes: itens.length > 0,
+    });
+  }
+  return itens;
+}
+
+/** Agendada/recusada com aprovação e horário no futuro: dá para responder. */
+function podeResponder(post) {
+  const status = normalizarStatus(post.status);
+  return (
+    Boolean(post.aprovacao) &&
+    [STATUS.AGENDADA, STATUS.RECUSADA].includes(status) &&
+    new Date(post.data_hora).getTime() > Date.now()
+  );
+}
+
+function acoesAprovacao(post) {
+  return [
+    { titulo: "Resposta pelo cliente" },
+    {
+      rotulo: "✓ Deferir pelo cliente",
+      acao: () => emit("aprovacao", { publicacao: post, decisao: APROVACAO.DEFERIDA }),
+      desabilitado: post.aprovacao === APROVACAO.DEFERIDA,
+    },
+    {
+      rotulo: "✕ Indeferir pelo cliente",
+      acao: () => emit("aprovacao", { publicacao: post, decisao: APROVACAO.INDEFERIDA }),
+      desabilitado: post.aprovacao === APROVACAO.INDEFERIDA,
+      perigo: true,
+    },
+  ];
+}
+
+/** Selo e detalhe da coluna "Aprovação do cliente". */
+function aprovacaoDe(post) {
+  const quem = post.aprovacao_pela_equipe
+    ? `pela equipe${post.aprovacao_por_nome ? ` (${post.aprovacao_por_nome})` : ""}`
+    : `por ${post.aprovacao_por_nome || "cliente"}`;
+  const quando = post.aprovacao_em ? ` · ${formatarData(post.aprovacao_em)}` : "";
+
+  if (post.aprovacao === APROVACAO.DEFERIDA) {
+    return { rotulo: "✓ Deferida", classe: "publicada", detalhe: `${quem}${quando}` };
+  }
+  if (post.aprovacao === APROVACAO.INDEFERIDA) {
+    const motivo = post.aprovacao_motivo ? `: “${post.aprovacao_motivo}”` : "";
+    return { rotulo: "✕ Indeferida", classe: "erro", detalhe: `${quem}${motivo}` };
+  }
+  // Pendente
+  const status = normalizarStatus(post.status);
+  if (status === STATUS.AGENDADA) {
+    return { rotulo: "● Aguardando", classe: "pendente", detalhe: `Sem resposta até ${formatarData(post.data_hora)} → publica` };
+  }
+  return { rotulo: "Sem resposta", classe: "", detalhe: status === STATUS.PUBLICADA ? "publicada no horário" : "" };
+}
 </script>
 
 <style scoped>
@@ -114,7 +206,7 @@ const emit = defineEmits(["comentarios"]);
 
 table {
   width: 100%;
-  min-width: 900px;
+  min-width: 1080px;
   border-collapse: collapse;
 }
 
@@ -185,6 +277,41 @@ tr:last-child td {
   -webkit-box-orient: vertical;
 }
 
+.aprovacao small {
+  display: block;
+  max-width: 220px;
+  margin-top: 5px;
+  color: #888;
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
+.aprovacao small.motivo-erro {
+  display: -webkit-box;
+  color: var(--cor-erro-texto);
+}
+
+.status.pendente {
+  background: #fff6e0;
+  color: #8a5a00;
+}
+
+.status.agendada {
+  background: #eef3ff;
+  color: #2b4fae;
+}
+
+.status.cancelada {
+  background: #efefef;
+  color: #666;
+  text-decoration: line-through;
+}
+
+.status.recusada {
+  background: var(--cor-erro-fundo);
+  color: var(--cor-erro-texto);
+}
+
 .status.erro {
   background: var(--cor-erro-fundo);
   color: var(--cor-erro-texto);
@@ -221,11 +348,4 @@ tr:last-child td {
   cursor: default;
 }
 
-.action-button {
-  border: none;
-  background: transparent;
-  color: #666;
-  font-size: 18px;
-  cursor: pointer;
-}
 </style>

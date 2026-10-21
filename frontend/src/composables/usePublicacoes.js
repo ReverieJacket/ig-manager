@@ -5,7 +5,7 @@
 import { computed, onMounted, ref } from "vue";
 
 import { listarPublicacoes } from "../api/publicacoes";
-import { FILTRO_TODAS, STATUS } from "../constants/publicacoes";
+import { APROVACAO, FILTRO_AGUARDANDO, FILTRO_TODAS, STATUS } from "../constants/publicacoes";
 import { normalizarStatus } from "../utils/formatadores";
 
 /**
@@ -44,16 +44,29 @@ export function usePublicacoes() {
       : publicacoes.value
   );
 
-  /** Quantidade de publicações por status; todos os status começam em 0. */
+  /** Agendada esperando a resposta do cliente. */
+  function aguardandoCliente(publicacao) {
+    return (
+      normalizarStatus(publicacao.status) === STATUS.AGENDADA &&
+      publicacao.aprovacao === APROVACAO.PENDENTE
+    );
+  }
+
+  /**
+   * Quantidade de publicações por status (todos começam em 0), mais
+   * `aguardando_cliente`.
+   */
   const contagens = computed(() => {
     const total = Object.fromEntries(
       Object.values(STATUS).map((status) => [status, 0])
     );
+    total[FILTRO_AGUARDANDO] = 0;
 
     for (const publicacao of doCliente.value) {
       const status = normalizarStatus(publicacao.status);
 
       if (status in total) total[status] += 1;
+      if (aguardandoCliente(publicacao)) total[FILTRO_AGUARDANDO] += 1;
     }
 
     return total;
@@ -63,7 +76,9 @@ export function usePublicacoes() {
     const termo = busca.value.trim().toLowerCase();
 
     return doCliente.value.filter((publicacao) => {
-      if (
+      if (filtro.value === FILTRO_AGUARDANDO) {
+        if (!aguardandoCliente(publicacao)) return false;
+      } else if (
         filtro.value !== FILTRO_TODAS &&
         normalizarStatus(publicacao.status) !== filtro.value
       ) {

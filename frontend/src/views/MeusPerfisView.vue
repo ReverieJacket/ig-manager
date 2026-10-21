@@ -1,7 +1,8 @@
 <!--
   Meus perfis (cliente): perfis do Instagram em que publicamos para o
-  cliente. O próprio cliente informa o @ (sem senha); a conexão com o
-  Instagram é concluída pela equipe.
+  cliente. O próprio cliente informa o @ (sem senha) e, quando liberado
+  (`podeConectar`), conecta o perfil: o Chromium abre e ele faz o login
+  no Instagram ali mesmo. A senha nunca passa pelo sistema.
 -->
 <template>
   <div class="page">
@@ -33,23 +34,50 @@
               <div class="avatar" aria-hidden="true">{{ iniciais(conta.nome || conta.username) }}</div>
               <div class="dados">
                 <strong>@{{ conta.username }}</strong>
-                <span>
+                <span v-if="conexao[conta.id]" :class="conexao[conta.id].classe">{{ conexao[conta.id].texto }}</span>
+                <span v-else>
                   {{ conta.nome }}
                   <template v-if="conta.cadastradaEm"> · informada em {{ formatarDia(conta.cadastradaEm) }}</template>
                 </span>
               </div>
               <span class="selo" :class="seloDe(conta).classe">● {{ seloDe(conta).rotulo }}</span>
+              <button
+                v-if="conta.podeConectar && seloDe(conta).classe !== 'selo--sucesso'"
+                class="botao botao--primario botao--pequeno"
+                type="button"
+                :disabled="emAndamento(conta.id)"
+                @click="conectar(conta)"
+              >
+                {{ emAndamento(conta.id) ? "Aguardando login..." : conta.status === "expirada" ? "Reconectar" : "Conectar" }}
+              </button>
             </li>
           </ul>
 
-          <p v-if="contas.some((c) => c.status === 'expirada')" class="alerta alerta--erro">
-            A conexão de um perfil com o Instagram <strong>expirou</strong> e as publicações nele estão
-            paradas. A equipe já foi avisada e vai reconectar com você.
+          <p v-if="algumEmAndamento" class="alerta alerta--info">
+            Uma janela do navegador foi aberta com o Instagram. <strong>Entre na sua conta por ela</strong>
+            (e confirme o código, se o Instagram pedir). Assim que o login terminar, a janela fecha
+            sozinha e o perfil fica <strong>Conectado</strong>. Sua senha não é guardada pelo sistema.
           </p>
-          <p v-if="contas.some((c) => seloDe(c).classe === 'selo--aviso')" class="alerta alerta--aviso">
-            Perfis <strong>aguardando conexão</strong> ainda não recebem publicações. A equipe vai
-            entrar em contato para concluir a conexão com o Instagram.
-          </p>
+          <template v-else-if="podeConectar">
+            <p v-if="contas.some((c) => c.status === 'expirada')" class="alerta alerta--erro">
+              A conexão de um perfil com o Instagram <strong>expirou</strong> e as publicações nele estão
+              paradas. Clique em <strong>Reconectar</strong> e entre na sua conta de novo.
+            </p>
+            <p v-if="contas.some((c) => seloDe(c).classe === 'selo--aviso')" class="alerta alerta--aviso">
+              Perfis <strong>aguardando conexão</strong> ainda não recebem publicações. Clique em
+              <strong>Conectar</strong> e entre na sua conta do Instagram na janela que abrir.
+            </p>
+          </template>
+          <template v-else>
+            <p v-if="contas.some((c) => c.status === 'expirada')" class="alerta alerta--erro">
+              A conexão de um perfil com o Instagram <strong>expirou</strong> e as publicações nele estão
+              paradas. A equipe já foi avisada e vai reconectar com você.
+            </p>
+            <p v-if="contas.some((c) => seloDe(c).classe === 'selo--aviso')" class="alerta alerta--aviso">
+              Perfis <strong>aguardando conexão</strong> ainda não recebem publicações. A equipe vai
+              entrar em contato para concluir a conexão com o Instagram.
+            </p>
+          </template>
         </template>
       </section>
 
@@ -92,7 +120,8 @@
 
         <ol class="passos">
           <li>Você informa o @ aqui — <strong>sem senha</strong>.</li>
-          <li>A equipe conecta o perfil ao sistema com você.</li>
+          <li v-if="podeConectar">Você clica em <strong>Conectar</strong> e entra no Instagram pela janela que abrir.</li>
+          <li v-else>A equipe conecta o perfil ao sistema com você.</li>
           <li>Pronto: o perfil passa a receber as publicações.</li>
         </ol>
       </form>
@@ -101,9 +130,14 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 
-import { adicionarMinhaConta, listarMinhasContas } from "../api/minhaArea";
+import {
+  adicionarMinhaConta,
+  conectarMeuPerfil,
+  consultarConexaoMeuPerfil,
+  listarMinhasContas,
+} from "../api/minhaArea";
 
 const contas = ref([]);
 const carregando = ref(true);
@@ -173,7 +207,73 @@ async function adicionar() {
   }
 }
 
+/* ------------------------- conexão com o Instagram ------------------------- */
+
+const podeConectar = computed(() => contas.value.some((c) => c.podeConectar));
+
+/** Estado da conexão por perfil: { status, texto, classe }. */
+const conexao = ref({});
+const intervalos = new Map();
+const EM_ANDAMENTO = ["iniciando", "aguardando_login"];
+
+const TEXTOS = {
+  iniciando: { texto: "Abrindo o navegador...", classe: "txt-info" },
+  aguardando_login: { texto: "Entre na sua conta na janela do Instagram que abriu.", classe: "txt-info" },
+  conectado: { texto: "Conectado! Já pode receber publicações.", classe: "txt-sucesso" },
+  cancelado: { texto: "A janela foi fechada antes do login. Tente de novo.", classe: "txt-erro" },
+  erro: { texto: "Não foi possível conectar. Tente de novo.", classe: "txt-erro" },
+};
+
+const algumEmAndamento = computed(() => Object.keys(conexao.value).some((id) => emAndamento(id)));
+
+function emAndamento(id) {
+  return EM_ANDAMENTO.includes(conexao.value[id]?.status);
+}
+
+function definirConexao(id, status, mensagemErro) {
+  const base = TEXTOS[status] || TEXTOS.erro;
+  conexao.value[id] = { status, ...base, ...(mensagemErro ? { texto: mensagemErro } : {}) };
+}
+
+function pararAcompanhamento(id) {
+  clearInterval(intervalos.get(id));
+  intervalos.delete(id);
+}
+
+async function conectar(conta) {
+  try {
+    const r = await conectarMeuPerfil(conta.id);
+    definirConexao(conta.id, r.status || "iniciando");
+  } catch (e) {
+    definirConexao(conta.id, "erro", e.message);
+    return;
+  }
+
+  pararAcompanhamento(conta.id);
+  intervalos.set(
+    conta.id,
+    setInterval(async () => {
+      try {
+        const r = await consultarConexaoMeuPerfil(conta.id);
+        definirConexao(conta.id, r.status);
+        if (!EM_ANDAMENTO.includes(r.status)) {
+          pararAcompanhamento(conta.id);
+          await carregar();
+          // A mensagem de sucesso some sozinha; a de erro fica até nova tentativa.
+          if (r.status === "conectado") setTimeout(() => { delete conexao.value[conta.id]; }, 6000);
+        }
+      } catch (e) {
+        definirConexao(conta.id, "erro", e.message);
+        pararAcompanhamento(conta.id);
+      }
+    }, 3000)
+  );
+}
+
 onMounted(carregar);
+onBeforeUnmount(() => {
+  for (const id of [...intervalos.keys()]) pararAcompanhamento(id);
+});
 </script>
 
 <style scoped>
@@ -242,6 +342,23 @@ onMounted(carregar);
 .dados span {
   color: #888;
   font-size: 12px;
+}
+
+.alerta--info {
+  background: #eef3ff;
+  color: #2b4fae;
+}
+
+.txt-info {
+  color: #2b4fae !important;
+}
+
+.txt-sucesso {
+  color: var(--cor-sucesso-texto) !important;
+}
+
+.txt-erro {
+  color: var(--cor-erro-texto) !important;
 }
 
 .arroba {

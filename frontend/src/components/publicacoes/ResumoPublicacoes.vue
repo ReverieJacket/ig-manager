@@ -4,7 +4,12 @@
 -->
 <template>
   <div class="summary-grid">
-    <div v-for="item in itens" :key="item.valor" class="summary-card">
+    <div
+      v-for="item in itens"
+      :key="item.valor"
+      class="summary-card"
+      :class="{ destaque: item.valor === FILTRO_AGUARDANDO && contagens[item.valor] > 0 }"
+    >
       <span>{{ item.rotulo }}</span>
       <strong>{{ contagens[item.valor] ?? 0 }}</strong>
     </div>
@@ -12,7 +17,7 @@
 </template>
 
 <script setup>
-import { ABAS_FILTRO, FILTRO_TODAS } from "../../constants/publicacoes";
+import { ABAS_FILTRO, FILTRO_AGUARDANDO, FILTRO_TODAS } from "../../constants/publicacoes";
 
 /**
  * @property {Object<string, number>} contagens - Quantidade por status
@@ -38,6 +43,11 @@ const itens = ABAS_FILTRO.filter((aba) => aba.valor !== FILTRO_TODAS);
   background: white;
   border: 1px solid var(--cor-borda);
   border-radius: 9px;
+}
+
+.summary-card.destaque {
+  border-color: #f0c36a;
+  background: #fffaf0;
 }
 
 .summary-card span {

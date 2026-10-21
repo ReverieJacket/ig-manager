@@ -95,6 +95,19 @@ async function registrarAcesso(id) {
         .from(TABELA).update({ ultimo_acesso: new Date().toISOString() }).eq("id", id);
     if (error) throw error;
 }
+/**
+ * Nomes de vários usuários (quem respondeu as aprovações).
+ *
+ * @param {number[]} ids
+ * @returns {Promise<{id: number, nome: string, perfil: string}[]>}
+ */
+async function buscarNomesPorIds(ids) {
+    if (ids.length === 0) return [];
+    const { data, error } = await supabase
+        .from(TABELA).select("id, nome, perfil").in("id", ids);
+    if (error) throw error;
+    return data || [];
+}
 
 module.exports = {
     VIOLACAO_UNICA,
@@ -102,6 +115,7 @@ module.exports = {
     buscarParaLogin,
     buscarHashPorId,
     buscarPorId,
+    buscarNomesPorIds,
     buscarPorEmail,
     listarPorCliente,
     criar,
