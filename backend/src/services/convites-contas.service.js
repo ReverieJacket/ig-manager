@@ -24,14 +24,15 @@ function estadoConvite(convite) {
   }
   return convite;
 }
-async function gerar({ cliente, validadeHoras }) {
-  const nomeCliente = String(cliente || "").trim();
+function validarValidade(validadeHoras) {
   const horas = Number(validadeHoras);
-  if (!nomeCliente || nomeCliente.length > 120) throw new ErroHttp(400, "Informe um nome de cliente válido.");
   if (![24, 72, 168].includes(horas)) throw new ErroHttp(400, "Validade inválida. Escolha 24 horas, 3 dias ou 7 dias.");
+  return horas;
+}
+/** Cria o convite para um cliente já existente e devolve o link (token só aparece aqui). */
+async function criarConvitePara(registroCliente, horas) {
   const token = crypto.randomBytes(32).toString("hex");
   const expiresAt = new Date(Date.now() + horas * 60 * 60 * 1000).toISOString();
-  const registroCliente = await clientesRepository.buscarOuCriarPorNome(nomeCliente);
   const convite = await contasRepository.criarConvite({
     cliente: registroCliente.nome,
     cliente_id: registroCliente.id,
@@ -39,6 +40,24 @@ async function gerar({ cliente, validadeHoras }) {
     expires_at: expiresAt
   });
   return { ...convite, url: `${config.frontendUrl}/cadastro-conta/${token}` };
+}
+async function gerar({ cliente, validadeHoras }) {
+  const nomeCliente = String(cliente || "").trim();
+  if (!nomeCliente || nomeCliente.length > 120) throw new ErroHttp(400, "Informe um nome de cliente válido.");
+  const horas = validarValidade(validadeHoras);
+  const registroCliente = await clientesRepository.buscarOuCriarPorNome(nomeCliente);
+  return criarConvitePara(registroCliente, horas);
+}
+/**
+ * Link para um cliente existente informar o @ (botão "Link para o cliente"
+ * da tela Clientes). O perfil cadastrado entra direto nesse cliente.
+ */
+async function gerarParaCliente(clienteId, validadeHoras) {
+  const horas = validarValidade(validadeHoras);
+  const registroCliente = await clientesRepository.buscarPorId(clienteId);
+  if (!registroCliente) throw new ErroHttp(404, "Cliente não encontrado.");
+  if (!registroCliente.ativo) throw new ErroHttp(400, "Reative o cliente antes de gerar um link.");
+  return criarConvitePara(registroCliente, horas);
 }
 async function consultar(token) {
   validarToken(token);
@@ -70,4 +89,4 @@ async function cadastrar(token, dados) {
     throw erro;
   }
 }
-module.exports = { gerar, consultar, cadastrar };
+module.exports = { gerar, gerarParaCliente, consultar, cadastrar };

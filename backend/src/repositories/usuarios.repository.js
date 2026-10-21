@@ -2,13 +2,18 @@
  * Repositório de usuários do sistema (tabela `usuarios`).
  * Camada de acesso a dados: só conhece o Supabase.
  *
- * `senha_hash` só sai daqui pela função `buscarParaLogin`; as demais
- * nunca devolvem o hash.
+ * `senha_hash` só sai daqui pelas funções `buscarParaLogin` e
+ * `buscarHashPorId`; as demais nunca devolvem o hash.
  */
 const { supabase } = require("../lib/supabase");
 
 const TABELA = "usuarios";
-const COLUNAS = "id, nome, email, perfil, cliente_id, ativo, ultimo_acesso, clientes(id, nome, ativo)";
+const COLUNAS =
+    "id, nome, email, perfil, cliente_id, ativo, ultimo_acesso, criado_em, " +
+    "senha_temporaria, sessao_versao, clientes(id, nome, ativo)";
+
+/** Código do Postgres para violação de unicidade (e-mail repetido). */
+const VIOLACAO_UNICA = "23505";
 
 /** E-mail sempre comparado/gravado em minúsculas e sem espaços. */
 function normalizarEmail(email) {
@@ -26,6 +31,14 @@ async function buscarParaLogin(email) {
     return data;
 }
 
+/** Hash da senha atual (uso exclusivo da troca de senha). */
+async function buscarHashPorId(id) {
+    const { data, error } = await supabase
+        .from(TABELA).select("id, senha_hash").eq("id", id).maybeSingle();
+    if (error) throw error;
+    return data?.senha_hash || null;
+}
+
 async function buscarPorId(id) {
     const { data, error } = await supabase
         .from(TABELA).select(COLUNAS).eq("id", id).maybeSingle();
@@ -40,9 +53,20 @@ async function buscarPorEmail(email) {
     return data;
 }
 
+/** Usuários de um cliente, do mais antigo para o mais novo. */
+async function listarPorCliente(clienteId) {
+    const { data, error } = await supabase
+        .from(TABELA).select(COLUNAS)
+        .eq("cliente_id", clienteId)
+        .order("id", { ascending: true });
+    if (error) throw error;
+    return data || [];
+}
+
 /**
  * @param {{nome: string, email: string, senha_hash: string,
- *          perfil: ("admin"|"cliente"), cliente_id?: (number|null)}} usuario
+ *          perfil: ("admin"|"cliente"), cliente_id?: (number|null),
+ *          senha_temporaria?: boolean}} usuario
  */
 async function criar(usuario) {
     const { data, error } = await supabase
@@ -55,8 +79,12 @@ async function criar(usuario) {
 }
 
 async function atualizar(id, campos) {
+    const dados = "email" in campos
+        ? { ...campos, email: normalizarEmail(campos.email) }
+        : campos;
+
     const { data, error } = await supabase
-        .from(TABELA).update(campos).eq("id", id).select(COLUNAS).single();
+        .from(TABELA).update(dados).eq("id", id).select(COLUNAS).single();
     if (error) throw error;
     return data;
 }
@@ -69,10 +97,13 @@ async function registrarAcesso(id) {
 }
 
 module.exports = {
+    VIOLACAO_UNICA,
     normalizarEmail,
     buscarParaLogin,
+    buscarHashPorId,
     buscarPorId,
     buscarPorEmail,
+    listarPorCliente,
     criar,
     atualizar,
     registrarAcesso

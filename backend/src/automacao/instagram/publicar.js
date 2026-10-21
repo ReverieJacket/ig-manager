@@ -9,6 +9,7 @@ const fs = require("fs");
 
 const { log, salvarScreenshot } = require("./helpers");
 const { abrirSessao } = require("./navegador");
+const { SESSAO_INVALIDA } = require("./sessao");
 const passos = require("./passos");
 
 /**
@@ -18,6 +19,7 @@ const passos = require("./passos");
  *   resultado não pôde ser confirmado (a publicação PODE ter ocorrido; não
  *   tente novamente sem conferir o perfil).
  * @property {string} mensagem - Descrição legível do resultado.
+ * @property {boolean} [sessaoInvalida] - O Instagram pediu login de novo (reconectar o perfil).
  * @property {string} [evidencia] - Indício usado (ou ausente) na confirmação.
  * @property {string|null} [codigoPost] - Código curto do post no Instagram
  *   (o trecho de `instagram.com/p/<codigo>/`), quando informado pela API.
@@ -150,7 +152,9 @@ async function publicarNoInstagram(
         return {
             sucesso: false,
             incerto: compartilhou,
-            mensagem: erro.message
+            mensagem: erro.message,
+            // O Instagram pediu login: o perfil precisa ser reconectado.
+            sessaoInvalida: erro.codigo === SESSAO_INVALIDA
         };
     } finally {
         if (sessao) await sessao.fechar();

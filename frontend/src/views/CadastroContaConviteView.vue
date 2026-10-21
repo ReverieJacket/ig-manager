@@ -11,35 +11,39 @@
         <p class="erro">{{ erro }}</p>
       </template>
       <template v-else-if="sucesso">
-        <h1>Conta cadastrada!</h1>
-        <p>A conta <strong>@{{ username }}</strong> foi vinculada a {{ convite.cliente }}.</p>
-        <div class="aviso"><strong>Conexão local:</strong> ao iniciar, o Chromium será aberto na máquina que executa o backend. Neste modo de desenvolvimento, o login precisa ser concluído nessa máquina. Não informe sua senha neste formulário.</div>
-        <p v-if="statusConexao" class="status">{{ mensagemStatus }}</p>
-        <p v-if="erroConexao" class="erro">{{ erroConexao }}</p>
-        <button type="button" :disabled="conectando || statusConexao === 'conectado'" @click="iniciarConexao">{{ conectando ? "Abrindo navegador..." : statusConexao === "conectado" ? "Instagram conectado" : "Conectar Instagram" }}</button>
+        <h1>Perfil informado!</h1>
+        <p>O perfil <strong>@{{ username.replace(/^@+/, "").toLowerCase() }}</strong> foi vinculado a {{ convite.cliente }}.</p>
+        <div class="aviso">
+          <strong>Próximo passo:</strong> a equipe vai conectar o perfil ao Instagram com você.
+          Até lá ele aparece como "Aguardando conexão". Você não precisa fazer mais nada nesta página.
+        </div>
       </template>
       <template v-else>
-        <h1>Cadastro de conta Instagram</h1>
-        <p>Convite destinado a <strong>{{ convite.cliente }}</strong>. Preencha os dados da conta que deseja vincular.</p>
+        <h1>Informe o seu perfil do Instagram</h1>
+        <p>Link destinado a <strong>{{ convite.cliente }}</strong>. Preencha os dados do perfil em que vamos publicar.</p>
         <form @submit.prevent="enviar">
-          <label for="nome">Nome da conta</label>
+          <label for="nome">Nome do perfil</label>
           <input id="nome" v-model.trim="nome" maxlength="120" required placeholder="Ex.: Loja Exemplo" />
           <label for="username">Usuário do Instagram</label>
           <div class="username"><span>@</span><input id="username" v-model.trim="username" maxlength="30" required placeholder="usuario" /></div>
-          <p class="aviso">Não informe sua senha. A conexão será realizada posteriormente pelo administrador, em um navegador seguro.</p>
+          <p class="aviso">Não informe sua senha. A conexão com o Instagram é feita depois pela equipe.</p>
           <p v-if="erroEnvio" class="erro">{{ erroEnvio }}</p>
           <button type="submit" :disabled="enviando">{{ enviando ? "Enviando..." : "Enviar cadastro" }}</button>
         </form>
-        <small>Este convite expira em {{ new Date(convite.expires_at).toLocaleString("pt-BR") }} e pode ser utilizado uma única vez.</small>
+        <small>Este link expira em {{ new Date(convite.expires_at).toLocaleString("pt-BR") }} e pode ser utilizado uma única vez.</small>
       </template>
     </section>
   </main>
 </template>
 
 <script setup>
-import { onMounted, onUnmounted, ref, computed } from "vue";
+/*
+ * Link enviado ao cliente para ele informar o @ (sem login e sem senha).
+ * A conexão com o Instagram é feita depois pelo administrador, em Clientes.
+ */
+import { onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
-import { consultarConviteConta, cadastrarContaPorConvite, conectarInstagram, consultarConexao } from "../api/contas";
+import { consultarConviteConta, cadastrarContaPorConvite } from "../api/contas";
 
 const route = useRoute();
 const convite = ref(null);
@@ -50,23 +54,10 @@ const erro = ref("");
 const erroEnvio = ref("");
 const nome = ref("");
 const username = ref("");
-const contaId = ref(null);
-const conectando = ref(false);
-const statusConexao = ref("");
-const erroConexao = ref("");
-let intervaloStatus = null;
-const mensagemStatus = computed(() => ({
-  iniciando: "Preparando o navegador do Instagram...",
-  aguardando_login: "Navegador aberto. Conclua o login na máquina do backend.",
-  conectado: "Conexão realizada com sucesso!",
-  erro: "Não foi possível concluir a conexão. Verifique o navegador e tente novamente.",
-  cancelado: "A conexão foi encerrada.",
-  desconectado: "A conta ainda não está conectada."
-}[statusConexao.value] || "Aguardando atualização do status..."));
 
 onMounted(async () => {
   try { convite.value = await consultarConviteConta(String(route.params.token || "")); }
-  catch (e) { erro.value = e.message || "Convite inválido, expirado ou já utilizado."; }
+  catch (e) { erro.value = e.message || "Link inválido, expirado ou já utilizado."; }
   finally { carregando.value = false; }
 });
 
@@ -74,42 +65,11 @@ async function enviar() {
   erroEnvio.value = "";
   enviando.value = true;
   try {
-    const conta = await cadastrarContaPorConvite(String(route.params.token || ""), { nome: nome.value, username: username.value });
-    contaId.value = conta?.id ?? conta?.conta?.id ?? null;
+    await cadastrarContaPorConvite(String(route.params.token || ""), { nome: nome.value, username: username.value });
     sucesso.value = true;
   } catch (e) { erroEnvio.value = e.message || "Não foi possível enviar o cadastro."; }
   finally { enviando.value = false; }
 }
-
-async function atualizarStatus() {
-  if (!contaId.value) return;
-  try {
-    const resultado = await consultarConexao(contaId.value);
-    statusConexao.value = resultado?.status || (resultado?.conectado ? "conectado" : "");
-    if (["conectado", "erro", "cancelado", "desconectado"].includes(statusConexao.value)) {
-      clearInterval(intervaloStatus);
-      intervaloStatus = null;
-    }
-  } catch (e) { erroConexao.value = e.message || "Não foi possível consultar a conexão."; }
-}
-
-async function iniciarConexao() {
-  erroConexao.value = "";
-  if (!contaId.value) {
-    erroConexao.value = "O cadastro foi concluído, mas a API não retornou o identificador da conta. Solicite apoio ao administrador.";
-    return;
-  }
-  conectando.value = true;
-  try {
-    const resultado = await conectarInstagram(contaId.value);
-    statusConexao.value = resultado?.status || "aguardando_login";
-    await atualizarStatus();
-    if (!intervaloStatus && statusConexao.value !== "conectado") intervaloStatus = setInterval(atualizarStatus, 2000);
-  } catch (e) { erroConexao.value = e.message || "Não foi possível iniciar a conexão."; }
-  finally { conectando.value = false; }
-}
-
-onUnmounted(() => { if (intervaloStatus) clearInterval(intervaloStatus); });
 </script>
 
 <style scoped>

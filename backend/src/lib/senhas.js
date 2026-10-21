@@ -79,4 +79,32 @@ async function conferirSenha(senha, hashGravado) {
     }
 }
 
-module.exports = { gerarHash, conferirSenha, validarSenhaNova, SENHA_MIN };
+/**
+ * Letras e números sem caracteres que se confundem ao ditar ou ler
+ * (0/O, 1/l/I), para a senha temporária ser fácil de repassar.
+ */
+const ALFABETO_TEMPORARIA = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+
+/**
+ * Gera uma senha temporária aleatória no formato `XXXX-XXXX-XXXX`
+ * (12 caracteres de um alfabeto de 54 ≈ 69 bits de entropia).
+ *
+ * @returns {string}
+ */
+function gerarSenhaTemporaria() {
+    const caracteres = [];
+
+    for (let i = 0; i < 12; i++) {
+        caracteres.push(ALFABETO_TEMPORARIA[crypto.randomInt(ALFABETO_TEMPORARIA.length)]);
+    }
+
+    return [0, 4, 8].map((inicio) => caracteres.slice(inicio, inicio + 4).join("")).join("-");
+}
+
+module.exports = {
+    gerarHash,
+    conferirSenha,
+    validarSenhaNova,
+    gerarSenhaTemporaria,
+    SENHA_MIN
+};

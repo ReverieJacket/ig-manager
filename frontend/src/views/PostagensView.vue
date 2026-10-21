@@ -16,6 +16,19 @@
       </router-link>
     </div>
 
+    <div v-if="perfisEmAtencao.length" class="alerta alerta--erro faixa-atencao" role="alert">
+      <div>
+        <strong>
+          {{ perfisEmAtencao.length === 1 ? "1 perfil precisa ser reconectado" : `${perfisEmAtencao.length} perfis precisam ser reconectados` }}
+        </strong>
+        <span>
+          A sessão do Instagram expirou e as publicações nesses perfis estão paradas:
+          {{ perfisEmAtencao.map((p) => `@${p.username}${p.cliente ? ` (${p.cliente.nome})` : ""}`).join(", ") }}.
+        </span>
+      </div>
+      <router-link to="/clientes" class="botao botao--secundario botao--pequeno">Ver em Clientes</router-link>
+    </div>
+
     <ResumoPublicacoes :contagens="contagens" />
 
     <section class="cartao">
@@ -33,15 +46,17 @@
         </div>
 
         <div class="toolbar-right">
+          <select v-model="cliente" class="campo filtro-cliente" aria-label="Filtrar por cliente">
+            <option value="">Todos os clientes</option>
+            <option v-for="c in clientes" :key="c.id" :value="c.id">{{ c.nome }} ({{ c.total }})</option>
+          </select>
+
           <input
             v-model="busca"
             class="campo"
             type="text"
             placeholder="Pesquisar..."
           />
-
-          <!-- Placeholder: filtros avançados ainda não implementados. -->
-          <button class="botao botao--secundario" type="button">Filtros</button>
         </div>
       </div>
 
@@ -72,16 +87,20 @@
 </template>
 
 <script setup>
-import { ref } from "vue";
+import { onMounted, ref } from "vue";
 
 import ModalComentarios from "../components/publicacoes/ModalComentarios.vue";
 import ResumoPublicacoes from "../components/publicacoes/ResumoPublicacoes.vue";
 import TabelaPublicacoes from "../components/publicacoes/TabelaPublicacoes.vue";
 import { ABAS_FILTRO } from "../constants/publicacoes";
+import { useAlertasPerfis } from "../composables/useAlertasPerfis";
 import { usePublicacoes } from "../composables/usePublicacoes";
 
-const { carregando, erro, filtro, busca, filtradas, contagens, carregar } =
+const { carregando, erro, filtro, busca, cliente, clientes, filtradas, contagens, carregar } =
   usePublicacoes();
+
+const { perfisEmAtencao, atualizar: atualizarAlertas } = useAlertasPerfis();
+onMounted(() => atualizarAlertas({ forcar: true }));
 
 /** Publicação cujos comentários estão abertos no modal (`null` = fechado). */
 const publicacaoAberta = ref(null);
@@ -114,6 +133,31 @@ const publicacaoAberta = ref(null);
 
 .cartao {
   overflow: hidden;
+}
+
+.faixa-atencao {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.faixa-atencao strong {
+  display: block;
+  margin-bottom: 2px;
+}
+
+.faixa-atencao .botao {
+  flex: none;
+  text-decoration: none;
+}
+
+.filtro-cliente {
+  width: 190px;
+  padding: 9px 11px;
+  border-radius: 7px;
+  background: #fff;
 }
 
 .posts-toolbar {
@@ -155,7 +199,7 @@ const publicacaoAberta = ref(null);
   gap: 8px;
 }
 
-.toolbar-right .campo {
+.toolbar-right input.campo {
   width: 180px;
   padding: 9px 11px;
   border-radius: 7px;
