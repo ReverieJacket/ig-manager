@@ -44,9 +44,12 @@ function cancelar(id) {
 /**
  * Publica se, NO HORÁRIO, a publicação ainda estiver agendada.
  *
- * Relê o banco porque o cliente pode ter indeferido (status `recusada`)
- * ou mudado a resposta depois que o timer foi criado. Sem resposta
- * (`aprovacao` = pendente) ou deferida: publica.
+ * Relê o banco porque o cliente pode ter respondido depois que o timer
+ * foi criado:
+ * - deferida, ou sem aprovação (publicação antiga, anterior à etapa 3): publica;
+ * - indeferida: não publica;
+ * - SEM RESPOSTA (`pendente`): o prazo acabou; não publica e vira
+ *   `recusada`, com o motivo em `erro`.
  *
  * @param {{id: number}} publicacao
  */
@@ -61,6 +64,11 @@ async function executarSeAindaAgendada(publicacao) {
 
     if (atual.aprovacao === APROVACAO.INDEFERIDA) {
         log.info(`Publicação ${id} não será publicada: indeferida pelo cliente.`);
+        return;
+    }
+
+    if (atual.aprovacao === APROVACAO.PENDENTE) {
+        await marcarPrazoEsgotado(id);
         return;
     }
 
@@ -143,6 +151,31 @@ async function marcarErro(id, mensagem) {
     }
 }
 
+/** Mensagem gravada quando o cliente não responde até o horário. */
+const MENSAGEM_PRAZO_ESGOTADO =
+    "Não publicada: o cliente não respondeu à aprovação até o horário.";
+
+/**
+ * Sem resposta do cliente até o horário: a publicação não sai e vira
+ * `recusada` (só se ainda estiver agendada; nunca lança exceção).
+ *
+ * @param {number} id
+ */
+async function marcarPrazoEsgotado(id) {
+    try {
+        const atualizada = await publicacoesRepository.atualizarSeStatus(
+            id,
+            { status: STATUS.RECUSADA, erro: MENSAGEM_PRAZO_ESGOTADO },
+            [STATUS.AGENDADA]
+        );
+        if (atualizada) {
+            log.info(`Publicação ${id} não publicada: o cliente não respondeu até o horário.`);
+        }
+    } catch (erro) {
+        log.erro(`Não foi possível marcar o prazo esgotado da publicação ${id}`, formatarErro(erro));
+    }
+}
+
 /**
  * Recupera o estado do agendador a partir do banco. Deve ser chamada uma
  * vez, ao iniciar o servidor e ANTES de aceitar requisições.
@@ -151,6 +184,8 @@ async function marcarErro(id, mensagem) {
  *   sabe se o post saiu, então vira `erro` (sem nova tentativa, para não
  *   arriscar um post duplicado).
  * - `agendada` com data futura: volta a ser agendada.
+ * - `agendada` sem resposta do cliente com o horário vencido: não publica
+ *   (prazo esgotado), mesmo que o atraso seja pequeno.
  * - `agendada` atrasada até `ATRASO_MAXIMO_MS`: é publicada agora.
  * - `agendada` atrasada além disso: vira `erro` ("horário perdido").
  *
@@ -186,6 +221,13 @@ async function restaurarPendentes() {
                 publicacao.id,
                 "Agendamento com data inválida; reagende a publicação."
             );
+            continue;
+        }
+
+        // Sem resposta do cliente e horário vencido: prazo esgotado, não publica.
+        if (atraso > 0 && publicacao.aprovacao === APROVACAO.PENDENTE) {
+            perdidas++;
+            await marcarPrazoEsgotado(publicacao.id);
             continue;
         }
 

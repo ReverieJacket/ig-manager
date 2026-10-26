@@ -393,4 +393,26 @@ onBeforeUnmount(() => {
     grid-template-columns: 1fr;
   }
 }
+
+@media (max-width: 600px) {
+  .bloco {
+    padding: 16px;
+  }
+
+  .item {
+    flex-wrap: wrap;
+  }
+
+  .dados {
+    flex: 1 1 calc(100% - 52px);
+  }
+
+  .item .selo {
+    margin-left: 50px;
+  }
+
+  .item .botao {
+    margin-left: auto;
+  }
+}
 </style>

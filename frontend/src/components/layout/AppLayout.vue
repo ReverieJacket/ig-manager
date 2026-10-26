@@ -2,10 +2,36 @@
   Layout principal: menu lateral fixo + área de conteúdo.
   É a rota pai do roteador; a tela atual aparece em <router-view />.
   O menu muda conforme o perfil de quem está logado.
+
+  Celular/tablet (até 900px): o menu lateral vira uma gaveta que abre pelo
+  botão ☰ da barra do topo e fecha ao escolher uma tela.
 -->
 <template>
-  <div class="app-layout">
-    <aside class="sidebar">
+  <div class="app-layout" :class="{ 'menu-aberto': menuAberto }">
+    <header class="barra-topo">
+      <button
+        class="botao-menu"
+        type="button"
+        :aria-expanded="menuAberto"
+        aria-controls="menu-lateral"
+        :aria-label="menuAberto ? 'Fechar menu' : 'Abrir menu'"
+        @click="menuAberto = !menuAberto"
+      >
+        <span class="hamburguer" aria-hidden="true"></span>
+        <span v-if="totalAlertas > 0 && !menuAberto" class="ponto-alerta" aria-hidden="true"></span>
+      </button>
+      <div class="logo logo--topo">
+        <div class="logo-icon">◎</div>
+        <span>IG Manager</span>
+      </div>
+      <router-link to="/meu-perfil" class="avatar avatar--topo" :class="usuario?.perfil" title="Meu perfil">
+        {{ iniciais }}
+      </router-link>
+    </header>
+
+    <div class="veu" aria-hidden="true" @click="menuAberto = false"></div>
+
+    <aside id="menu-lateral" class="sidebar">
       <div class="logo">
         <div class="logo-icon">◎</div>
         <span>IG Manager</span>
@@ -68,6 +94,20 @@ const { usuario, ehAdmin, sair } = useSessao();
 const { totalEmAtencao, atualizar: atualizarAlertas } = useAlertasPerfis();
 const { totalPendentes, atualizar: atualizarAprovacoes } = useAprovacoesPendentes();
 const saindo = ref(false);
+
+// Gaveta do menu no celular: fecha sempre que a tela muda.
+const menuAberto = ref(false);
+watch(
+  () => route.fullPath,
+  () => {
+    menuAberto.value = false;
+  }
+);
+
+/** Algum contador do menu ativo (ponto vermelho no botão ☰). */
+const totalAlertas = computed(() =>
+  ehAdmin.value ? totalEmAtencao.value : totalPendentes.value
+);
 
 // Contadores do menu, conferidos a cada troca de tela (no máximo uma
 // consulta a cada 30 s): perfis com sessão expirada (administrador) e
@@ -330,58 +370,165 @@ async function sairDoSistema() {
   padding: 42px 50px;
 }
 
-/* Responsivo: menu recolhido (somente ícones) */
-@media (max-width: 700px) {
-  .sidebar {
-    width: 68px;
-    padding: 28px 10px;
+/* Barra do topo e véu: só no celular/tablet */
+.barra-topo,
+.veu {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .barra-topo {
+    position: fixed;
+    top: 0;
+    right: 0;
+    left: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 56px;
+    padding: 0 14px;
+    border-bottom: 1px solid var(--cor-borda);
+    background: var(--cor-superficie);
   }
 
-  .logo {
-    justify-content: center;
+  .logo--topo {
+    flex: 1;
+    margin: 0;
     padding: 0;
+    font-size: 18px;
   }
 
-  .logo span,
-  .nav-item .nav-rotulo,
-  .perfil-tag,
-  .usuario-dados {
+  .logo--topo .logo-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    font-size: 18px;
+  }
+
+  .avatar--topo {
+    width: 34px;
+    height: 34px;
+    font-size: 12px;
+  }
+
+  .botao-menu {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border: 1px solid var(--cor-borda);
+    border-radius: 10px;
+    background: #fff;
+    cursor: pointer;
+  }
+
+  .hamburguer,
+  .hamburguer::before,
+  .hamburguer::after {
+    display: block;
+    width: 18px;
+    height: 2px;
+    border-radius: 2px;
+    background: #222;
+    transition: transform 0.2s ease, background 0.2s ease;
+  }
+
+  .hamburguer {
+    position: relative;
+  }
+
+  .hamburguer::before,
+  .hamburguer::after {
+    position: absolute;
+    left: 0;
+    content: "";
+  }
+
+  .hamburguer::before {
+    top: -6px;
+  }
+
+  .hamburguer::after {
+    top: 6px;
+  }
+
+  .menu-aberto .hamburguer {
+    background: transparent;
+  }
+
+  .menu-aberto .hamburguer::before {
+    transform: translateY(6px) rotate(45deg);
+  }
+
+  .menu-aberto .hamburguer::after {
+    transform: translateY(-6px) rotate(-45deg);
+  }
+
+  .ponto-alerta {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 9px;
+    height: 9px;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    background: #d0352a;
+  }
+
+  /* A barra lateral vira gaveta */
+  .sidebar {
+    top: 56px;
+    z-index: 30;
+    width: min(280px, 82vw);
+    height: calc(100vh - 56px);
+    height: calc(100dvh - 56px);
+    padding: 18px 14px;
+    overflow-y: auto;
+    box-shadow: 8px 0 30px rgba(0, 0, 0, 0.12);
+    transform: translateX(-105%);
+    transition: transform 0.22s ease;
+  }
+
+  .menu-aberto .sidebar {
+    transform: translateX(0);
+  }
+
+  .sidebar > .logo {
     display: none;
   }
 
-  .usuario {
-    flex-direction: column;
-    padding: 12px 0 0;
+  .veu {
+    position: fixed;
+    inset: 56px 0 0;
+    z-index: 25;
+    display: block;
+    background: rgba(17, 24, 39, 0.35);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
   }
 
-  .sair {
-    margin-left: 0;
-  }
-
-  .navigation {
-    align-items: center;
+  .menu-aberto .veu {
+    opacity: 1;
+    pointer-events: auto;
   }
 
   .nav-item {
-    position: relative;
-    justify-content: center;
-    width: 48px;
-    padding: 0;
-  }
-
-  .nav-alerta {
-    position: absolute;
-    top: 4px;
-    right: 2px;
-    min-width: 16px;
-    padding: 0 4px;
-    font-size: 10px;
-    line-height: 16px;
+    height: 50px;
   }
 
   .main-content {
-    margin-left: 68px;
-    padding: 30px 20px;
+    margin-left: 0;
+    padding: 80px 18px 32px;
+  }
+}
+
+@media (max-width: 480px) {
+  .main-content {
+    padding: 72px 14px 28px;
   }
 }
 </style>

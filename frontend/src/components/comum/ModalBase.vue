@@ -139,4 +139,36 @@ onBeforeUnmount(() => document.removeEventListener("keydown", aoTeclar));
   border-top: 1px solid #eee;
   background: #fafafa;
 }
+
+/* Celular: a janela ocupa a largura toda e sobe do rodapé. */
+@media (max-width: 600px) {
+  .modal-fundo {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .modal {
+    width: 100% !important;
+    max-height: 92vh;
+    max-height: 92dvh;
+    border-radius: 14px 14px 0 0;
+  }
+
+  .modal-cabecalho {
+    padding: 16px;
+  }
+
+  .modal-corpo {
+    padding: 16px;
+  }
+
+  .modal-rodape {
+    flex-wrap: wrap;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  }
+
+  .modal-rodape :slotted(.botao) {
+    flex: 1 1 auto;
+  }
+}
 </style>

@@ -16,7 +16,7 @@
       <button class="botao botao--primario" type="button" @click="abrirNovoCliente">+ Novo cliente</button>
     </div>
 
-    <div class="colunas">
+    <div class="colunas" :class="{ 'mostrar-detalhe': detalheNoCelular }">
       <!-- ============================ Lista ============================ -->
       <section class="cartao lista">
         <div class="lista-topo">
@@ -41,7 +41,7 @@
             type="button"
             class="item-cliente"
             :class="{ selecionado: c.id === selecionadoId, inativo: !c.ativo }"
-            @click="selecionar(c.id)"
+            @click="abrirCliente(c.id)"
           >
             <span class="item-dados">
               <strong>{{ c.nome }}</strong>
@@ -75,6 +75,8 @@
         </div>
 
         <template v-else-if="detalhe">
+          <button class="voltar-lista" type="button" @click="detalheNoCelular = false">← Clientes</button>
+
           <div class="detalhe-topo">
             <div>
               <h2>{{ detalhe.cliente.nome }}</h2>
@@ -498,6 +500,18 @@ async function carregarDetalhe() {
   }
 }
 
+/**
+ * Celular/tablet: a lista e o detalhe não cabem lado a lado. Tocar num
+ * cliente mostra o detalhe; "← Clientes" volta para a lista.
+ */
+const detalheNoCelular = ref(false);
+
+function abrirCliente(id) {
+  selecionar(id);
+  detalheNoCelular.value = true;
+  window.scrollTo({ top: 0 });
+}
+
 function selecionar(id) {
   if (selecionadoId.value === id) return;
   selecionadoId.value = id;
@@ -663,7 +677,7 @@ function salvarNovoCliente() {
     const r = await criarCliente({ nome: form.cliente, usuario: { nome: form.nome, email: form.email } });
     await carregarLista();
     selecionadoId.value = null;
-    selecionar(r.cliente.id);
+    abrirCliente(r.cliente.id);
     mostrarSenha({
       titulo: "Cliente criado",
       resumo: `${r.cliente.nome} foi criado com o usuário ${r.usuario.email}.`,
@@ -887,6 +901,7 @@ function executarExclusao() {
     modal.value = null;
     selecionadoId.value = null;
     detalhe.value = null;
+    detalheNoCelular.value = false;
     await Promise.all([carregarLista(), alertas.atualizar({ forcar: true })]);
   });
 }
@@ -1324,6 +1339,10 @@ onBeforeUnmount(() => {
   font-size: 12px;
 }
 
+.voltar-lista {
+  display: none;
+}
+
 @media (max-width: 1100px) {
   .estado {
     min-width: 0;
@@ -1337,6 +1356,113 @@ onBeforeUnmount(() => {
 @media (max-width: 960px) {
   .colunas {
     grid-template-columns: 1fr;
+  }
+
+  /* Uma coisa por vez: lista OU detalhe. */
+  .colunas:not(.mostrar-detalhe) .detalhe,
+  .colunas.mostrar-detalhe .lista {
+    display: none;
+  }
+
+  .voltar-lista {
+    display: inline-block;
+    margin: 14px 0 0 18px;
+    padding: 6px 0;
+    border: 0;
+    background: none;
+    color: #555;
+    font-size: 13.5px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+}
+
+@media (max-width: 600px) {
+  .detalhe-topo {
+    padding: 14px 16px 0;
+  }
+
+  .detalhe-topo h2 {
+    font-size: 19px;
+  }
+
+  .faixa {
+    margin: 12px 16px 0;
+  }
+
+  .abas {
+    gap: 18px;
+    padding: 0 16px;
+    overflow-x: auto;
+  }
+
+  .abas button {
+    flex: none;
+    white-space: nowrap;
+  }
+
+  .aba-conteudo {
+    padding: 12px 16px 16px;
+  }
+
+  .barra {
+    flex-wrap: wrap;
+  }
+
+  .barra .botao {
+    flex: 1 1 auto;
+  }
+
+  /* Linha do perfil/usuário: dados em cima; situação e ações embaixo. */
+  .linha {
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    padding: 14px 0;
+  }
+
+  .info {
+    flex: 1 1 calc(100% - 56px);
+  }
+
+  .info span {
+    white-space: normal;
+  }
+
+  .estado {
+    flex: 1 1 auto;
+    padding-left: 54px;
+  }
+
+  .acao-principal {
+    flex: none;
+  }
+
+  .avatar-ig,
+  .avatar-pessoa {
+    width: 40px;
+    height: 40px;
+  }
+
+  .item-cliente {
+    padding: 14px 16px;
+  }
+
+  .lista-rodape {
+    padding: 12px 16px;
+  }
+
+  .chips {
+    flex-wrap: wrap;
+  }
+
+  .caixa-copiar {
+    flex-wrap: wrap;
+  }
+
+  .caixa-copiar code {
+    flex-basis: 100%;
+    white-space: normal;
+    word-break: break-all;
   }
 }
 </style>
