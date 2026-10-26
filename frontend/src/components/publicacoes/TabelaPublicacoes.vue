@@ -1,6 +1,10 @@
 <!--
   Tabela de publicações. Componente de apresentação: recebe a lista
   pronta e não faz requisições.
+
+  No celular (até 760px) cada linha vira um cartão: imagem, legenda e
+  ações no topo; status/aprovação no meio; data, cliente e engajamento
+  embaixo.
 -->
 <template>
   <div class="table-wrapper">
@@ -21,18 +25,18 @@
 
       <tbody>
         <tr v-for="post in publicacoes" :key="post.id">
-          <td>
+          <td class="c-imagem">
             <div class="image-placeholder">
               <img v-if="post.imagem" :src="post.imagem" alt="" />
               <span v-else>—</span>
             </div>
           </td>
 
-          <td class="caption">{{ post.texto || "Sem legenda" }}</td>
+          <td class="caption c-legenda">{{ post.texto || "Sem legenda" }}</td>
 
-          <td>{{ post.conta || post.username || "—" }}</td>
+          <td class="c-perfil">{{ post.conta || post.username || "—" }}</td>
 
-          <td>
+          <td class="c-status">
             <span class="status" :class="normalizarStatus(post.status)">
               {{ formatarStatus(post.status) }}
             </span>
@@ -43,7 +47,7 @@
             >{{ post.erro }}</small>
           </td>
 
-          <td class="aprovacao">
+          <td class="aprovacao c-aprovacao" data-rotulo="Aprovação do cliente">
             <template v-if="normalizarStatus(post.status) === STATUS.CANCELADA">
               <span class="status cancelada">Cancelada</span>
               <small>pela equipe{{ post.cancelada_por_nome ? ` (${post.cancelada_por_nome})` : "" }}{{ post.cancelada_em ? ` · ${formatarData(post.cancelada_em)}` : "" }}</small>
@@ -60,9 +64,9 @@
             </template>
           </td>
 
-          <td>{{ formatarData(post.data_hora) }}</td>
+          <td class="c-data">{{ formatarData(post.data_hora) }}</td>
 
-          <td>
+          <td class="c-engajamento">
             <div class="engagement">
               <span
                 :title="
@@ -91,9 +95,9 @@
             </div>
           </td>
 
-          <td>{{ post.cliente || "—" }}</td>
+          <td class="c-cliente">{{ post.cliente || "—" }}</td>
 
-          <td>
+          <td class="c-acoes">
             <MenuAcoes
               v-if="podeResponder(post) || podeCancelar(post)"
               :itens="acoesDe(post)"
@@ -192,8 +196,12 @@ function aprovacaoDe(post) {
   // Pendente
   const status = normalizarStatus(post.status);
   if (status === STATUS.AGENDADA) {
-    return { rotulo: "● Aguardando", classe: "pendente", detalhe: `Sem resposta até ${formatarData(post.data_hora)} → publica` };
+    return { rotulo: "● Aguardando", classe: "pendente", detalhe: `Sem resposta até ${formatarData(post.data_hora)} → não publica` };
   }
+  if (status === STATUS.RECUSADA) {
+    return { rotulo: "⏱ Prazo esgotado", classe: "", detalhe: "o cliente não respondeu · não publicada" };
+  }
+  // Publicadas antes desta regra (sem resposta ainda saíam no horário).
   return { rotulo: "Sem resposta", classe: "", detalhe: status === STATUS.PUBLICADA ? "publicada no horário" : "" };
 }
 </script>
@@ -348,4 +356,76 @@ tr:last-child td {
   cursor: default;
 }
 
+
+/* ---------------------- Celular: cada linha é um cartão ---------------------- */
+@media (max-width: 760px) {
+  table {
+    min-width: 0;
+  }
+
+  thead {
+    display: none;
+  }
+
+  tbody tr {
+    display: grid;
+    grid-template-areas:
+      "imagem legenda acoes"
+      "imagem perfil perfil"
+      "status status status"
+      "aprovacao aprovacao aprovacao"
+      "data data engajamento"
+      "cliente cliente cliente";
+    grid-template-columns: 56px minmax(0, 1fr) auto;
+    column-gap: 12px;
+    row-gap: 6px;
+    padding: 14px;
+    border-bottom: 1px solid #eee;
+  }
+
+  tr:last-child {
+    border-bottom: 0;
+  }
+
+  td {
+    padding: 0;
+    border: 0;
+  }
+
+  .c-imagem { grid-area: imagem; }
+  .c-legenda { grid-area: legenda; }
+  .c-perfil { grid-area: perfil; color: #777; font-size: 12.5px; }
+  .c-status { grid-area: status; margin-top: 4px; }
+  .c-aprovacao { grid-area: aprovacao; }
+  .c-data { grid-area: data; color: #666; font-size: 12.5px; }
+  .c-engajamento { grid-area: engajamento; justify-self: end; }
+  .c-cliente { grid-area: cliente; color: #777; font-size: 12.5px; }
+  .c-acoes { grid-area: acoes; align-self: start; }
+
+  .c-imagem .image-placeholder {
+    width: 56px;
+    height: 56px;
+  }
+
+  .caption {
+    max-width: none;
+    font-weight: 600;
+  }
+
+  .c-aprovacao::before {
+    display: block;
+    margin-bottom: 3px;
+    color: #999;
+    font-size: 10.5px;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    content: attr(data-rotulo);
+  }
+
+  .c-cliente:empty,
+  .motivo-erro,
+  .aprovacao small {
+    max-width: none;
+  }
+}
 </style>

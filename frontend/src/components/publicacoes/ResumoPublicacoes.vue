@@ -68,9 +68,29 @@ const itens = ABAS_FILTRO.filter((aba) => aba.valor !== FILTRO_TODAS);
   }
 }
 
+@media (max-width: 950px) {
+  /* 5 cartões em 2 colunas: o último ocupa a linha inteira. */
+  .summary-card:last-child {
+    grid-column: 1 / -1;
+  }
+}
+
 @media (max-width: 600px) {
   .summary-grid {
-    grid-template-columns: 1fr;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+
+  .summary-card {
+    padding: 11px 13px;
+  }
+
+  .summary-card span {
+    font-size: 11.5px;
+  }
+
+  .summary-card strong {
+    font-size: 19px;
   }
 }
 </style>

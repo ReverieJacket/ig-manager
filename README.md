@@ -149,8 +149,9 @@ Quem está com senha temporária só acessa `/auth/*` até criar a própria senh
 Erros seguem o formato `{ "sucesso": false, "mensagem": "..." }`.
 
 **Aprovações:** toda publicação *agendada* passa pela aprovação do cliente; *publicar
-agora* não. Sem resposta até o horário, publica. Indeferida não é publicada (vira
-*Recusada*); para mudar o conteúdo, crie outra publicação. O cliente pode trocar a
+agora* não. **Só é publicada se estiver deferida**: sem resposta até o horário, o
+prazo se esgota e ela vira *Recusada* (não sai, nem com o servidor atrasado). Indeferida
+também não é publicada (vira *Recusada*); para mudar o conteúdo, crie outra publicação. O cliente pode trocar a
 resposta até o horário, e o administrador pode responder em nome dele (fica
 registrado como "pela equipe"). No horário, o agendador relê o banco e pula as recusadas.
 O administrador também pode **cancelar** uma agendada (menu ⋯ em Postagens): ela vira

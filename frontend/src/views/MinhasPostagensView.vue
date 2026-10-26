@@ -302,4 +302,20 @@ onMounted(carregar);
     align-items: stretch;
   }
 }
+
+@media (max-width: 700px) {
+  .abas {
+    overflow-x: auto;
+  }
+
+  .abas button {
+    flex: none;
+    white-space: nowrap;
+  }
+
+  .filtro-conta {
+    width: 100%;
+    min-width: 0;
+  }
+}
 </style>

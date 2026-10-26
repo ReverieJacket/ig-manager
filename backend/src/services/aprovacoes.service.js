@@ -4,7 +4,8 @@
  * Regras:
  * - Publicação AGENDADA nasce com `aprovacao = "pendente"`; publicar agora
  *   não passa por aprovação (`aprovacao` nula).
- * - Sem resposta até o horário, publica (o agendador só pula as recusadas).
+ * - Sem resposta até o horário, NÃO publica: o agendador marca a publicação
+ *   como `recusada` ("prazo esgotado"). Só sai se estiver deferida.
  * - Indeferida não é publicada: o status vira `recusada` e o timer é
  *   cancelado. Não existe "ajustar e reenviar": a equipe cria outra.
  * - O cliente pode mudar a resposta até o horário; deferir uma recusada
@@ -211,14 +212,17 @@ async function comAutorDaResposta(publicacoes) {
 
 /** Data usada para ordenar as respondidas (resposta ou cancelamento). */
 function dataResposta(p) {
-    return p.status === STATUS.CANCELADA ? p.cancelada_em || p.aprovacao_em : p.aprovacao_em;
+    if (p.status === STATUS.CANCELADA) return p.cancelada_em || p.aprovacao_em;
+    if (p.aprovacao === APROVACAO.PENDENTE) return p.data_hora; // prazo esgotado
+    return p.aprovacao_em;
 }
 
 /**
  * Tela Aprovações do cliente.
  *
  * - `pendentes`: agendadas sem resposta, com horário no futuro.
- * - `respondidas`: deferidas/indeferidas (e canceladas pela equipe) dos
+ * - `respondidas`: deferidas/indeferidas, canceladas pela equipe e as
+ *   que ficaram sem resposta até o horário (prazo esgotado), dos
  *   últimos dias e futuras; `podeMudar` indica se ainda dá para trocar a
  *   resposta.
  *
@@ -248,7 +252,12 @@ async function listarDoCliente(clienteId, completar) {
         pendentes: lista.filter((p) => p.aprovacao === APROVACAO.PENDENTE && p.podeMudar),
         // Canceladas pela equipe também aparecem aqui (sem opção de mudar).
         respondidas: lista
-            .filter((p) => p.aprovacao !== APROVACAO.PENDENTE || p.status === STATUS.CANCELADA)
+            .filter(
+                (p) =>
+                    p.aprovacao !== APROVACAO.PENDENTE ||
+                    p.status === STATUS.CANCELADA ||
+                    p.status === STATUS.RECUSADA // prazo esgotado (sem resposta)
+            )
             .sort((a, b) => new Date(dataResposta(b)) - new Date(dataResposta(a)))
     };
 }

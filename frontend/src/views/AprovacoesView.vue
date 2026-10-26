@@ -2,7 +2,7 @@
   Aprovações (cliente): publicações agendadas nos perfis do cliente.
 
   - Pendentes: deferir, indeferir (com motivo) ou deferir várias de uma vez.
-    Sem resposta até o horário, o post é publicado.
+    Sem resposta até o horário, o post NÃO é publicado (prazo esgotado).
   - Respondidas: a resposta dada (pelo cliente ou pela equipe em nome dele)
     e "Mudar para deferida/indeferida" até o horário da publicação.
 
@@ -12,7 +12,7 @@
   <div class="page">
     <div class="page-header">
       <h1>Aprovações</h1>
-      <p>Confira os posts programados para você. Sem resposta até o horário, o post é publicado.</p>
+      <p>Confira os posts programados para você. Só é publicado o que você deferir até o horário.</p>
     </div>
 
     <nav class="abas" role="tablist">
@@ -75,7 +75,7 @@
             <div class="lado">
               <div class="prazo">
                 <strong>{{ prazo(p.data_hora) }}</strong>
-                Sem resposta até {{ formatarData(p.data_hora) }}, o post é publicado automaticamente.
+                Sem resposta até {{ formatarData(p.data_hora) }}, o post <strong class="nao-publica">não é publicado</strong>.
               </div>
               <button class="botao botao--deferir" type="button" :disabled="ocupado" @click="deferir(p)">
                 {{ ocupado === p.id ? "Deferindo..." : "✓ Deferir" }}
@@ -103,7 +103,11 @@
             <p class="legenda">{{ p.texto }}</p>
           </div>
           <div class="lado">
-            <div v-if="p.status === 'cancelada'" class="resposta cancelada">
+            <div v-if="p.status === 'recusada' && p.aprovacao === APROVACAO.PENDENTE" class="resposta cancelada">
+              <strong>⏱ Prazo esgotado</strong>
+              Não houve resposta até {{ formatarData(p.data_hora) }} · não foi publicada.
+            </div>
+            <div v-else-if="p.status === 'cancelada'" class="resposta cancelada">
               <strong>⊘ Cancelada pela equipe</strong>
               {{ p.cancelada_por_nome ? `${p.cancelada_por_nome} · ` : "" }}{{ formatarData(p.cancelada_em) }} · não será publicada.
             </div>
@@ -445,6 +449,12 @@ onMounted(carregar);
   line-height: 1.5;
 }
 
+.prazo .nao-publica {
+  display: inline;
+  margin: 0;
+  font-size: inherit;
+}
+
 .prazo strong {
   display: block;
   margin-bottom: 2px;
@@ -505,6 +515,51 @@ onMounted(carregar);
 
   .imagem {
     max-width: 220px;
+  }
+}
+
+@media (max-width: 600px) {
+  .abas {
+    gap: 20px;
+  }
+
+  .barra-lote {
+    flex-wrap: wrap;
+    padding: 10px 12px;
+  }
+
+  .barra-lote .espaco {
+    display: none;
+  }
+
+  .barra-lote .botao {
+    flex: 1 1 auto;
+  }
+
+  .card,
+  .card.respondida {
+    position: relative;
+    gap: 12px;
+    padding: 14px;
+  }
+
+  /* Caixa de seleção sobre a imagem, no canto. */
+  .marcar {
+    position: absolute;
+    top: 22px;
+    left: 22px;
+    z-index: 1;
+    width: 20px;
+    height: 20px;
+  }
+
+  .imagem {
+    max-width: none;
+    aspect-ratio: 4 / 3;
+  }
+
+  .lado .botao {
+    padding: 12px;
   }
 }
 </style>

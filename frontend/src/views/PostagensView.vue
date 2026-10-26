@@ -377,33 +377,75 @@ async function aoIndeferir() {
 @media (max-width: 950px) {
   .posts-toolbar {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
     gap: 12px;
-    padding: 15px;
+    padding: 14px;
+  }
+
+  .tabs {
+    width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tabs button {
+    flex: none;
+    white-space: nowrap;
   }
 
   .toolbar-right {
     width: 100%;
   }
 
-  .toolbar-right .campo {
+  .toolbar-right .campo,
+  .toolbar-right input.campo,
+  .filtro-cliente {
     flex: 1;
+    width: auto;
+    min-width: 0;
   }
 }
 
 @media (max-width: 600px) {
   .header-linha {
+    align-items: center;
+    gap: 12px;
+  }
+
+  .header-linha p {
+    display: none;
+  }
+
+  .create-button {
+    flex: none;
+    padding: 10px 14px;
+  }
+
+  .faixa-atencao {
     flex-direction: column;
-    gap: 18px;
+    align-items: stretch;
+    gap: 10px;
   }
 
-  .tabs {
-    width: 100%;
-    overflow-x: auto;
+  .toolbar-right {
+    flex-direction: column;
   }
 
-  .tabs button {
-    white-space: nowrap;
+  .toast {
+    right: 14px;
+    bottom: 14px;
+    left: 14px;
+    max-width: none;
+  }
+
+  .state {
+    min-height: 160px;
+    padding: 0 16px;
+    text-align: center;
   }
 }
 </style>

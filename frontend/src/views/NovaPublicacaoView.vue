@@ -86,6 +86,12 @@
             :desabilitado="form.enviando.value"
           />
 
+          <p class="aviso-aprovacao">
+            O cliente precisa <strong>deferir</strong> em "Aprovações" até o horário.
+            Sem resposta até lá, a publicação <strong>não sai</strong>. Se ele aprovar por fora,
+            use "Deferir pelo cliente" em Postagens.
+          </p>
+
           <button
             type="button"
             class="botao botao--secundario schedule-button"
@@ -247,6 +253,16 @@ textarea.campo {
   accent-color: var(--cor-primaria);
 }
 
+.aviso-aprovacao {
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fff6e0;
+  color: #7a5200;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
 .schedule-button {
   width: 100%;
   margin-top: 15px;
@@ -290,7 +306,7 @@ textarea.campo {
 
 @media (max-width: 650px) {
   .create-page {
-    padding: 0 12px 24px;
+    padding: 0 0 24px;
   }
 
   .page-header h1 {
