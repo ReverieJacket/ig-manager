@@ -77,6 +77,7 @@
         @comentarios="publicacaoAberta = $event"
         @aprovacao="responderPeloClienteNaTela"
         @cancelar="abrirCancelar"
+        @retomar="retomando = $event"
       />
     </section>
 
@@ -132,6 +133,16 @@
       </template>
     </ModalBase>
 
+    <ModalRetomar
+      v-if="retomando"
+      :publicacao="retomando.publicacao"
+      :acao="retomando.acao"
+      pela-equipe
+      :enviar="(dados) => retomarPeloCliente(retomando.publicacao.id, dados)"
+      @fechar="retomando = null"
+      @concluido="aoRetomar"
+    />
+
     <ModalComentarios
       :publicacao="publicacaoAberta"
       @fechar="publicacaoAberta = null"
@@ -146,7 +157,8 @@ import { onMounted, reactive, ref } from "vue";
 import ModalBase from "../components/comum/ModalBase.vue";
 import ModalComentarios from "../components/publicacoes/ModalComentarios.vue";
 import ModalIndeferir from "../components/publicacoes/ModalIndeferir.vue";
-import { cancelarPublicacao, responderPeloCliente } from "../api/publicacoes";
+import ModalRetomar from "../components/publicacoes/ModalRetomar.vue";
+import { cancelarPublicacao, responderPeloCliente, retomarPeloCliente } from "../api/publicacoes";
 import ResumoPublicacoes from "../components/publicacoes/ResumoPublicacoes.vue";
 import TabelaPublicacoes from "../components/publicacoes/TabelaPublicacoes.vue";
 import { ABAS_FILTRO, APROVACAO } from "../constants/publicacoes";
@@ -196,6 +208,24 @@ async function confirmarDeferir() {
   } finally {
     salvandoDeferir.value = false;
   }
+}
+
+/* ---------------- sem resposta: publicar/agendar pelo cliente --------------- */
+
+const retomando = ref(null);
+
+async function aoRetomar({ acao, dataHora }) {
+  const p = retomando.value.publicacao;
+  retomando.value = null;
+  avisar(
+    "sucesso",
+    acao === "publicar"
+      ? `Publicando o post de @${p.username} (leva cerca de 1 minuto).`
+      : `Post de @${p.username} agendado para ${formatarData(dataHora)}, já deferido.`
+  );
+  await carregar({ silencioso: true });
+  // Atualiza de novo quando a publicação deve ter terminado.
+  if (acao === "publicar") setTimeout(() => carregar({ silencioso: true }), 70000);
 }
 
 /* -------------------------------- cancelar -------------------------------- */

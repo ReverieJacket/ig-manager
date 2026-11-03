@@ -3,6 +3,8 @@
 
   - Pendentes: deferir, indeferir (com motivo) ou deferir várias de uma vez.
     Sem resposta até o horário, o post NÃO é publicado (prazo esgotado).
+  - Sem resposta: posts cujo prazo acabou sem resposta (últimos 30 dias);
+    dá para "Publicar agora" ou "Agendar" de novo.
   - Respondidas: a resposta dada (pelo cliente ou pela equipe em nome dele)
     e "Mudar para deferida/indeferida" até o horário da publicação.
 
@@ -18,6 +20,9 @@
     <nav class="abas" role="tablist">
       <button type="button" role="tab" :aria-selected="aba === 'pendentes'" :class="{ ativa: aba === 'pendentes' }" @click="aba = 'pendentes'">
         Pendentes <span class="contagem" :class="{ rosa: dados.pendentes.length > 0 }">{{ dados.pendentes.length }}</span>
+      </button>
+      <button type="button" role="tab" :aria-selected="aba === 'semResposta'" :class="{ ativa: aba === 'semResposta' }" @click="aba = 'semResposta'">
+        Sem resposta <span class="contagem" :class="{ ambar: dados.semResposta.length > 0 }">{{ dados.semResposta.length }}</span>
       </button>
       <button type="button" role="tab" :aria-selected="aba === 'respondidas'" :class="{ ativa: aba === 'respondidas' }" @click="aba = 'respondidas'">
         Respondidas <span class="contagem">{{ dados.respondidas.length }}</span>
@@ -87,6 +92,38 @@
       </template>
     </template>
 
+    <!-- ========================== Sem resposta ========================== -->
+    <template v-else-if="aba === 'semResposta'">
+      <div v-if="dados.semResposta.length === 0" class="cartao estado-vazio">
+        <strong>Nenhum post sem resposta</strong>
+        <span>Quando o prazo de um post acabar sem resposta, ele fica aqui por 30 dias para você publicar ou agendar.</span>
+      </div>
+
+      <div v-else class="lista">
+        <article v-for="p in dados.semResposta" :key="p.id" class="card respondida">
+          <div class="imagem"><img v-if="p.imagem" :src="p.imagem" alt="" /></div>
+          <div class="conteudo">
+            <h3>@{{ p.username }}</h3>
+            <p class="info">Estava programado para <strong>{{ formatarData(p.data_hora) }}</strong></p>
+            <p class="legenda">{{ p.texto }}</p>
+          </div>
+          <div class="lado">
+            <div class="resposta cancelada">
+              <strong>⏱ Prazo esgotado</strong>
+              Não houve resposta até o horário, então o post não saiu. Você ainda pode usá-lo até
+              {{ formatarDia(limiteRetomada(p)) }}:
+            </div>
+            <button class="botao botao--deferir" type="button" :disabled="ocupado" @click="retomando = { publicacao: p, acao: 'publicar' }">
+              ▶ Publicar agora
+            </button>
+            <button class="botao botao--secundario" type="button" :disabled="ocupado" @click="retomando = { publicacao: p, acao: 'agendar' }">
+              🗓 Agendar
+            </button>
+          </div>
+        </article>
+      </div>
+    </template>
+
     <!-- ========================== Respondidas ========================== -->
     <template v-else>
       <div v-if="dados.respondidas.length === 0" class="cartao estado-vazio">
@@ -133,6 +170,15 @@
       </div>
     </template>
 
+    <ModalRetomar
+      v-if="retomando"
+      :publicacao="retomando.publicacao"
+      :acao="retomando.acao"
+      :enviar="(dadosRetomada) => retomarPublicacao(retomando.publicacao.id, dadosRetomada)"
+      @fechar="retomando = null"
+      @concluido="aoRetomar"
+    />
+
     <ModalIndeferir
       v-if="indeferindo"
       :publicacao="indeferindo"
@@ -147,14 +193,15 @@
 import { onMounted, reactive, ref } from "vue";
 
 import ModalIndeferir from "../components/publicacoes/ModalIndeferir.vue";
-import { deferirVarias, listarAprovacoes, responderAprovacao } from "../api/minhaArea";
+import ModalRetomar from "../components/publicacoes/ModalRetomar.vue";
+import { deferirVarias, listarAprovacoes, responderAprovacao, retomarPublicacao } from "../api/minhaArea";
 import { APROVACAO } from "../constants/publicacoes";
 import { useAprovacoesPendentes } from "../composables/useAprovacoesPendentes";
 import { formatarData } from "../utils/formatadores";
 
 const contador = useAprovacoesPendentes();
 
-const dados = reactive({ pendentes: [], respondidas: [] });
+const dados = reactive({ pendentes: [], semResposta: [], respondidas: [] });
 const carregando = ref(true);
 const erro = ref("");
 const aba = ref("pendentes");
@@ -176,6 +223,7 @@ async function carregar({ silencioso = false } = {}) {
   try {
     const r = await listarAprovacoes();
     dados.pendentes = r.pendentes;
+    dados.semResposta = r.semResposta;
     dados.respondidas = r.respondidas;
     selecionadas.value = selecionadas.value.filter((id) => r.pendentes.some((p) => p.id === id));
     contador.definir(r.pendentes.length);
@@ -199,14 +247,21 @@ function prazo(dataHora) {
 function tituloResposta(p) {
   const deferida = p.aprovacao === APROVACAO.DEFERIDA;
   const quem = p.aprovacao_pela_equipe ? "pela equipe" : "por você";
-  return `${deferida ? "✓ Deferida" : "✕ Indeferida"} ${quem}`;
+  const aposPrazo = p.retomada_em ? " após o prazo" : "";
+  return `${deferida ? "✓ Deferida" : "✕ Indeferida"} ${quem}${aposPrazo}`;
 }
 
 function detalheResposta(p) {
   const quando = formatarData(p.aprovacao_em);
   const autor = p.aprovacao_pela_equipe && p.aprovacao_por_nome ? `${p.aprovacao_por_nome} · ` : "";
   const efeito = p.aprovacao === APROVACAO.DEFERIDA
-    ? (p.status === "publicada" ? "publicada." : "será publicada no horário.")
+    ? (p.status === "publicada"
+        ? "publicada."
+        : p.status === "publicando"
+          ? "publicando agora."
+          : p.status === "erro"
+            ? "não foi possível publicar (a equipe vai verificar)."
+            : "será publicada no horário.")
     : "não será publicada.";
   return `${autor}${quando} · ${efeito}`;
 }
@@ -225,6 +280,31 @@ async function deferir(p) {
   } finally {
     ocupado.value = false;
   }
+}
+
+/* -------------------- sem resposta: publicar ou agendar -------------------- */
+
+const retomando = ref(null);
+const DIAS_PARA_RETOMAR = 30;
+
+function limiteRetomada(p) {
+  return new Date(new Date(p.data_hora).getTime() + DIAS_PARA_RETOMAR * 24 * 60 * 60 * 1000);
+}
+
+function formatarDia(data) {
+  return new Date(data).toLocaleDateString("pt-BR");
+}
+
+async function aoRetomar({ acao, dataHora }) {
+  const p = retomando.value.publicacao;
+  retomando.value = null;
+  avisar(
+    "sucesso",
+    acao === "publicar"
+      ? `Publicando o post de @${p.username}. Em cerca de 1 minuto ele aparece em "Minhas postagens".`
+      : `Post de @${p.username} agendado para ${formatarData(dataHora)}. Ele já está deferido.`
+  );
+  await carregar({ silencioso: true });
 }
 
 async function aoIndeferir() {
@@ -292,6 +372,11 @@ onMounted(carregar);
   color: #555;
   font-size: 12px;
   font-weight: 600;
+}
+
+.contagem.ambar {
+  background: #f1e2c4;
+  color: #7a5200;
 }
 
 .contagem.rosa {
@@ -521,6 +606,12 @@ onMounted(carregar);
 @media (max-width: 600px) {
   .abas {
     gap: 20px;
+    overflow-x: auto;
+  }
+
+  .abas button {
+    flex: none;
+    white-space: nowrap;
   }
 
   .barra-lote {

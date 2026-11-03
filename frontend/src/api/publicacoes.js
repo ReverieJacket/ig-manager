@@ -58,3 +58,18 @@ export function responderPeloCliente(id, dados) {
 export function cancelarPublicacao(id) {
   return requisicao(`/publicacoes/${id}/cancelar`, { method: "POST" });
 }
+
+/**
+ * Administrador retoma, em nome do cliente, um post sem resposta:
+ * publicar agora ou agendar de novo.
+ *
+ * @param {number} id
+ * @param {{acao: "publicar"|"agendar", dataHora?: string}} dados
+ */
+export function retomarPeloCliente(id, dados) {
+  return requisicao(`/publicacoes/${id}/retomar`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(dados),
+  });
+}

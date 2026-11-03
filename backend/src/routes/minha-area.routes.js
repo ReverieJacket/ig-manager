@@ -14,6 +14,9 @@
  * POST /minha-area/aprovacoes/:id      - { decisao, categoria?, motivo? }
  *                                        (deferida | indeferida).
  * POST /minha-area/aprovacoes/deferir  - { ids } -> defere várias.
+ * POST /minha-area/aprovacoes/:id/retomar - post sem resposta (prazo
+ *                                        esgotado): { acao: "publicar" } ou
+ *                                        { acao: "agendar", dataHora }.
  *
  * Conectar pelo cliente depende de `CONEXAO_PELO_CLIENTE` (ver config).
  * Desconectar continua só com o administrador.
@@ -29,6 +32,7 @@ const { contaComStatus } = require("../services/clientes.service");
 const instagramAuth = require("../services/instagram-auth.service");
 const publicacoesService = require("../services/publicacoes.service");
 const aprovacoesService = require("../services/aprovacoes.service");
+const retomadaService = require("../services/retomada.service");
 
 const router = Router();
 
@@ -102,6 +106,12 @@ router.post("/aprovacoes/:id", async (req, res) => {
     const id = validarId(req.params.id, "ID de publicação inválido.");
     const publicacao = await aprovacoesService.responder(id, req.body, req.usuario);
     res.json({ sucesso: true, aprovacao: publicacao.aprovacao, status: publicacao.status });
+});
+
+router.post("/aprovacoes/:id/retomar", async (req, res) => {
+    const id = validarId(req.params.id, "ID de publicação inválido.");
+    const publicacao = await retomadaService.retomar(id, req.body, req.usuario);
+    res.status(202).json({ sucesso: true, status: publicacao.status, dataHora: publicacao.data_hora });
 });
 
 module.exports = router;

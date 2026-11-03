@@ -21,6 +21,7 @@ const contasRepository = require("../repositories/contas.repository");
 const usuariosRepository = require("../repositories/usuarios.repository");
 const agendador = require("./agendador.service");
 const { PERFIS } = require("./auth.service");
+const { DIAS_PARA_RETOMAR, podeRetomar, semResposta } = require("./retomada.service");
 
 const { STATUS, APROVACAO } = publicacoesRepository;
 const log = criarLogger("Aprovacoes");
@@ -197,7 +198,11 @@ async function deferirLote(ids, autor) {
  */
 async function comAutorDaResposta(publicacoes) {
     const ids = [
-        ...new Set(publicacoes.flatMap((p) => [p.aprovacao_por, p.cancelada_por]).filter(Boolean))
+        ...new Set(
+            publicacoes
+                .flatMap((p) => [p.aprovacao_por, p.cancelada_por, p.retomada_por])
+                .filter(Boolean)
+        )
     ];
     const nomes = new Map(
         (await usuariosRepository.buscarNomesPorIds(ids)).map((u) => [u.id, u.nome])
@@ -206,7 +211,8 @@ async function comAutorDaResposta(publicacoes) {
     return publicacoes.map((p) => ({
         ...p,
         aprovacao_por_nome: p.aprovacao_por ? nomes.get(p.aprovacao_por) || null : null,
-        cancelada_por_nome: p.cancelada_por ? nomes.get(p.cancelada_por) || null : null
+        cancelada_por_nome: p.cancelada_por ? nomes.get(p.cancelada_por) || null : null,
+        retomada_por_nome: p.retomada_por ? nomes.get(p.retomada_por) || null : null
     }));
 }
 
@@ -221,8 +227,9 @@ function dataResposta(p) {
  * Tela Aprovações do cliente.
  *
  * - `pendentes`: agendadas sem resposta, com horário no futuro.
- * - `respondidas`: deferidas/indeferidas, canceladas pela equipe e as
- *   que ficaram sem resposta até o horário (prazo esgotado), dos
+ * - `semResposta`: ficaram sem resposta até o horário (prazo esgotado) nos
+ *   últimos 30 dias; o cliente pode publicar agora ou agendar de novo.
+ * - `respondidas`: deferidas/indeferidas e canceladas pela equipe, dos
  *   últimos dias e futuras; `podeMudar` indica se ainda dá para trocar a
  *   resposta.
  *
@@ -232,7 +239,10 @@ function dataResposta(p) {
  */
 async function listarDoCliente(clienteId, completar) {
     const contas = await contasRepository.listarPorCliente(clienteId);
-    const desde = new Date(Date.now() - DIAS_HISTORICO * 24 * 60 * 60 * 1000).toISOString();
+    // Busca o período maior (posts sem resposta ficam 30 dias); as
+    // respondidas são cortadas em DIAS_HISTORICO logo abaixo.
+    const desde = new Date(Date.now() - DIAS_PARA_RETOMAR * 24 * 60 * 60 * 1000).toISOString();
+    const limiteRespondidas = Date.now() - DIAS_HISTORICO * 24 * 60 * 60 * 1000;
 
     const brutas = await publicacoesRepository.listarComAprovacao(
         contas.filter((c) => c.ativo).map((c) => c.id),
@@ -241,7 +251,7 @@ async function listarDoCliente(clienteId, completar) {
 
     const agora = Date.now();
     const lista = (await comAutorDaResposta(await completar(brutas))).map(
-        ({ erro, aprovacao_por, cancelada_por, ...p }) => ({
+        ({ erro, aprovacao_por, cancelada_por, retomada_por, ...p }) => ({
             ...p,
             podeMudar:
                 STATUS_MUTAVEIS.includes(p.status) && new Date(p.data_hora).getTime() > agora
@@ -250,13 +260,17 @@ async function listarDoCliente(clienteId, completar) {
 
     return {
         pendentes: lista.filter((p) => p.aprovacao === APROVACAO.PENDENTE && p.podeMudar),
+        // Prazo esgotado nos últimos 30 dias: dá para publicar agora ou agendar.
+        semResposta: lista
+            .filter((p) => podeRetomar(p, agora))
+            .sort((a, b) => new Date(b.data_hora) - new Date(a.data_hora)),
         // Canceladas pela equipe também aparecem aqui (sem opção de mudar).
         respondidas: lista
             .filter(
                 (p) =>
-                    p.aprovacao !== APROVACAO.PENDENTE ||
-                    p.status === STATUS.CANCELADA ||
-                    p.status === STATUS.RECUSADA // prazo esgotado (sem resposta)
+                    !semResposta(p) &&
+                    (p.aprovacao !== APROVACAO.PENDENTE || p.status === STATUS.CANCELADA) &&
+                    new Date(dataResposta(p) || p.data_hora).getTime() >= limiteRespondidas
             )
             .sort((a, b) => new Date(dataResposta(b)) - new Date(dataResposta(a)))
     };

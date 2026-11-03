@@ -55,12 +55,13 @@ const comImagem = (publicacao) => ({
 /**
  * Tela Aprovações.
  *
- * @returns {Promise<{pendentes: object[], respondidas: object[]}>}
+ * @returns {Promise<{pendentes: object[], semResposta: object[], respondidas: object[]}>}
  */
 export async function listarAprovacoes() {
   const r = await requisicao("/minha-area/aprovacoes");
   return {
     pendentes: (r?.pendentes || []).map(comImagem),
+    semResposta: (r?.semResposta || []).map(comImagem),
     respondidas: (r?.respondidas || []).map(comImagem),
   };
 }
@@ -89,5 +90,19 @@ export function deferirVarias(ids) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ids }),
+  });
+}
+
+/**
+ * Post sem resposta (prazo esgotado): publicar agora ou agendar de novo.
+ *
+ * @param {number} id
+ * @param {{acao: "publicar"|"agendar", dataHora?: string}} dados
+ */
+export function retomarPublicacao(id, dados) {
+  return requisicao(`/minha-area/aprovacoes/${id}/retomar`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(dados),
   });
 }

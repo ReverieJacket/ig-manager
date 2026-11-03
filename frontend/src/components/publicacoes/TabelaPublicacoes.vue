@@ -99,7 +99,7 @@
 
           <td class="c-acoes">
             <MenuAcoes
-              v-if="podeResponder(post) || podeCancelar(post)"
+              v-if="podeResponder(post) || podeCancelar(post) || podeRetomar(post)"
               :itens="acoesDe(post)"
               rotulo="Ações da publicação"
             />
@@ -127,12 +127,25 @@ import {
  *   publicação da linha.
  * @event aprovacao - "Deferir/Indeferir pelo cliente": `{ publicacao, decisao }`.
  * @event cancelar - "Cancelar publicação": envia a publicação.
+ * @event retomar - Post sem resposta: `{ publicacao, acao: "publicar"|"agendar" }`.
  */
 defineProps({
   publicacoes: { type: Array, required: true },
 });
 
-const emit = defineEmits(["comentarios", "aprovacao", "cancelar"]);
+const emit = defineEmits(["comentarios", "aprovacao", "cancelar", "retomar"]);
+
+/** Dias depois do horário em que um post sem resposta ainda pode ser usado. */
+const DIAS_PARA_RETOMAR = 30;
+
+/** Prazo esgotado sem resposta e ainda dentro dos 30 dias. */
+function podeRetomar(post) {
+  return (
+    normalizarStatus(post.status) === STATUS.RECUSADA &&
+    post.aprovacao === APROVACAO.PENDENTE &&
+    new Date(post.data_hora).getTime() >= Date.now() - DIAS_PARA_RETOMAR * 24 * 60 * 60 * 1000
+  );
+}
 
 /** Agendada ou recusada (ainda não saiu): o administrador pode cancelar. */
 function podeCancelar(post) {
@@ -141,6 +154,13 @@ function podeCancelar(post) {
 
 function acoesDe(post) {
   const itens = podeResponder(post) ? acoesAprovacao(post) : [];
+  if (podeRetomar(post)) {
+    itens.push(
+      { titulo: "Sem resposta · pelo cliente" },
+      { rotulo: "▶ Publicar agora", acao: () => emit("retomar", { publicacao: post, acao: "publicar" }) },
+      { rotulo: "🗓 Agendar", acao: () => emit("retomar", { publicacao: post, acao: "agendar" }) }
+    );
+  }
   if (podeCancelar(post)) {
     itens.push({
       rotulo: "⊘ Cancelar publicação",
@@ -187,7 +207,8 @@ function aprovacaoDe(post) {
   const quando = post.aprovacao_em ? ` · ${formatarData(post.aprovacao_em)}` : "";
 
   if (post.aprovacao === APROVACAO.DEFERIDA) {
-    return { rotulo: "✓ Deferida", classe: "publicada", detalhe: `${quem}${quando}` };
+    const aposPrazo = post.retomada_em ? " · após o prazo" : "";
+    return { rotulo: "✓ Deferida", classe: "publicada", detalhe: `${quem}${quando}${aposPrazo}` };
   }
   if (post.aprovacao === APROVACAO.INDEFERIDA) {
     const motivo = post.aprovacao_motivo ? `: “${post.aprovacao_motivo}”` : "";
@@ -199,7 +220,13 @@ function aprovacaoDe(post) {
     return { rotulo: "● Aguardando", classe: "pendente", detalhe: `Sem resposta até ${formatarData(post.data_hora)} → não publica` };
   }
   if (status === STATUS.RECUSADA) {
-    return { rotulo: "⏱ Prazo esgotado", classe: "", detalhe: "o cliente não respondeu · não publicada" };
+    return {
+      rotulo: "⏱ Prazo esgotado",
+      classe: "",
+      detalhe: podeRetomar(post)
+        ? "o cliente não respondeu · dá para publicar ou agendar (⋯)"
+        : "o cliente não respondeu · não publicada",
+    };
   }
   // Publicadas antes desta regra (sem resposta ainda saíam no horário).
   return { rotulo: "Sem resposta", classe: "", detalhe: status === STATUS.PUBLICADA ? "publicada no horário" : "" };

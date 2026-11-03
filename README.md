@@ -75,7 +75,7 @@ npm run dev:frontend                   # http://localhost:5173
 
 Todo acesso exige login, exceto o link de convite. Execute no Supabase as migrações
 `004_clientes_usuarios.sql`, `005_area_cliente.sql`, `006_excluir_cliente.sql` e
-`007_sessao_expirada.sql`, `008_aprovacoes.sql`, `009_cancelar_publicacao.sql` e crie o primeiro administrador
+`007_sessao_expirada.sql`, `008_aprovacoes.sql`, `009_cancelar_publicacao.sql`, `010_retomar_publicacao.sql` e crie o primeiro administrador
 com `npm run criar:admin` (rodar de novo com o mesmo e-mail redefine a senha).
 
 - **Administrador:** Postagens, **Clientes** e Criar. Em *Clientes* fica tudo de cada
@@ -137,11 +137,13 @@ Quem está com senha temporária só acessa `/auth/*` até criar a própria senh
 | GET | `/minha-area/aprovacoes` | cliente | `{ pendentes, respondidas }` |
 | POST | `/minha-area/aprovacoes/:id` | cliente | `{ decisao: "deferida" \| "indeferida", categoria, motivo }` |
 | POST | `/minha-area/aprovacoes/deferir` | cliente | `{ ids }`: defere várias |
+| POST | `/minha-area/aprovacoes/:id/retomar` | cliente | Post sem resposta (até 30 dias): `{ acao: "publicar" }` ou `{ acao: "agendar", dataHora }` |
 | GET | `/contas` | admin | Perfis ativos (formato antigo) |
 | POST | `/contas/:id/conectar` | admin | Abre o Chromium para o login no Instagram |
 | GET / DELETE | `/contas/:id/conexao` | admin | Situação da conexão / desconecta |
 | GET | `/publicacoes` | admin | Publicações com dados da conta |
 | POST | `/publicacoes` | admin | Cria (multipart: `imagem`, `texto`, `dataHora`, `conta_id`); publicar agora é recusado (400) se o perfil não estiver conectado; agendada nasce com aprovação pendente |
+| POST | `/publicacoes/:id/retomar` | admin | O mesmo, em nome do cliente |
 | POST | `/publicacoes/:id/cancelar` | admin | Cancela uma agendada/recusada (vira `cancelada`; não apaga) |
 | POST | `/publicacoes/:id/aprovacao` | admin | Responde em nome do cliente (mesmo corpo do cliente) |
 | GET | `/publicacoes/:id` | admin | Uma publicação |
@@ -154,6 +156,9 @@ prazo se esgota e ela vira *Recusada* (não sai, nem com o servidor atrasado). I
 também não é publicada (vira *Recusada*); para mudar o conteúdo, crie outra publicação. O cliente pode trocar a
 resposta até o horário, e o administrador pode responder em nome dele (fica
 registrado como "pela equipe"). No horário, o agendador relê o banco e pula as recusadas.
+Post **sem resposta** não se perde: fica 30 dias na aba *Sem resposta* (Aprovações do
+cliente) e no menu ⋯ de Postagens, com **Publicar agora** (exige o perfil conectado) e
+**Agendar** (novo horário, já deferido). Fica registrado quem retomou e o horário original.
 O administrador também pode **cancelar** uma agendada (menu ⋯ em Postagens): ela vira
 *Cancelada*, fica no histórico e o cliente vê "Cancelada pela equipe".
 
