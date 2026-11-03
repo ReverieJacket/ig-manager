@@ -1,7 +1,8 @@
 <!--
   Retomar um post que ficou SEM RESPOSTA até o horário (prazo esgotado):
   - acao "publicar": confirmação de "Publicar agora";
-  - acao "agendar": escolhe data e horário (no mínimo 10 min à frente).
+  - acao "agendar": escolhe data e horário (qualquer horário que ainda não
+    passou; ex.: às 15:19, vale 15:20 em diante).
 
   Usado pelo cliente (Aprovações → Sem resposta) e pelo administrador
   (Postagens → ⋯, em nome do cliente).
@@ -38,9 +39,9 @@
         :desabilitado="enviando"
       />
       <small v-if="muitoCedo" class="dica dica--erro">
-        Esse horário está muito perto. Escolha a partir de {{ minimoTexto() }} (10 minutos de antecedência).
+        Esse horário já passou. Escolha a partir de {{ minimoTexto() }}.
       </small>
-      <small v-else class="dica">No mínimo 10 minutos a partir de agora.</small>
+      <small v-else class="dica">Qualquer horário a partir de agora.</small>
       <p class="alerta alerta--info">
         Se mudar de ideia, dá para indeferir em "Aprovações → Respondidas" até o novo horário.
       </p>
@@ -85,11 +86,10 @@ const props = defineProps({
 
 const emit = defineEmits(["fechar", "concluido"]);
 
-const ANTECEDENCIA_MS = 10 * 60 * 1000;
 
-/** Sugestão inicial: daqui a 15 minutos, arredondado para os 5 minutos seguintes. */
+/** Sugestão inicial: daqui a uns 5 minutos, arredondado para os 5 minutos seguintes. */
 function horarioSugerido() {
-  const d = new Date(Date.now() + 15 * 60 * 1000);
+  const d = new Date(Date.now() + 5 * 60 * 1000);
   d.setSeconds(0, 0);
   d.setMinutes(Math.ceil(d.getMinutes() / 5) * 5);
   const doisDigitos = (n) => String(n).padStart(2, "0");
@@ -113,8 +113,16 @@ const instante = computed(() => {
   return Number.isNaN(d.getTime()) ? null : d;
 });
 
+/** Próximo minuto cheio: às 15:19:30 o primeiro horário aceito é 15:20. */
+function proximoMinuto() {
+  const d = new Date();
+  d.setSeconds(0, 0);
+  d.setMinutes(d.getMinutes() + 1);
+  return d;
+}
+
 const horarioValido = computed(
-  () => Boolean(instante.value) && instante.value.getTime() >= Date.now() + ANTECEDENCIA_MS
+  () => Boolean(instante.value) && instante.value.getTime() >= proximoMinuto().getTime()
 );
 
 /** Data/hora preenchidas, mas antes do mínimo: mostra o aviso em vermelho. */
@@ -122,7 +130,7 @@ const muitoCedo = computed(() => Boolean(instante.value) && !horarioValido.value
 
 /** Primeiro horário aceito (calculado na hora, não fica em cache). */
 function minimoTexto() {
-  return new Date(Date.now() + ANTECEDENCIA_MS).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  return proximoMinuto().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 }
 
 const subtitulo = computed(() => {
@@ -143,8 +151,9 @@ const textoBotao = computed(() => {
 async function confirmar() {
   erro.value = "";
 
-  if (props.acao === "agendar" && !horarioValido.value) {
-    erro.value = "Escolha um horário com pelo menos 10 minutos de antecedência.";
+  // Confere de novo na hora do clique (o tempo passou desde a escolha).
+  if (props.acao === "agendar" && !(instante.value && instante.value.getTime() >= proximoMinuto().getTime())) {
+    erro.value = `Esse horário já passou. Escolha a partir de ${minimoTexto()}.`;
     return;
   }
 

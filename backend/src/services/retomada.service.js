@@ -6,7 +6,7 @@
  * nome dele) pode:
  * - publicar agora: a publicação sai em segundo plano (status
  *   `publicando`); exige o perfil conectado;
- * - agendar: escolhe um novo horário (no mínimo 10 min à frente) e a
+ * - agendar: escolhe qualquer horário que ainda não passou e a
  *   publicação já fica DEFERIDA, sem pedir nova aprovação.
  *
  * Fica registrado quem retomou (`retomada_por`, `retomada_pela_equipe`,
@@ -29,8 +29,12 @@ const log = criarLogger("Retomada");
 const DIAS_PARA_RETOMAR = 30;
 const MS_DIA = 24 * 60 * 60 * 1000;
 
-/** Antecedência mínima ao agendar de novo. */
-const ANTECEDENCIA_MINIMA_MS = 10 * 60 * 1000;
+/**
+ * Tolerância para relógios diferentes entre o navegador e o servidor: um
+ * horário escolhido "para o próximo minuto" pode chegar aqui alguns
+ * segundos atrasado. Nesse caso o agendador publica na hora.
+ */
+const TOLERANCIA_RELOGIO_MS = 60 * 1000;
 
 const ACOES = Object.freeze({ PUBLICAR: "publicar", AGENDAR: "agendar" });
 
@@ -76,15 +80,15 @@ async function buscarRetomavel(id, autor) {
     return publicacao;
 }
 
-/** Valida o novo horário (ISO 8601, no mínimo 10 min à frente, até 1 ano). */
+/** Valida o novo horário (ISO 8601, que ainda não passou, até 1 ano). */
 function validarNovoHorario(valor) {
     const data = new Date(String(valor || ""));
 
     if (!valor || Number.isNaN(data.getTime())) {
         throw new ErroHttp(400, "Informe a data e o horário da publicação.");
     }
-    if (data.getTime() < Date.now() + ANTECEDENCIA_MINIMA_MS) {
-        throw new ErroHttp(400, "Escolha um horário com pelo menos 10 minutos de antecedência.");
+    if (data.getTime() < Date.now() - TOLERANCIA_RELOGIO_MS) {
+        throw new ErroHttp(400, "Esse horário já passou. Escolha um horário a partir de agora.");
     }
     if (data.getTime() > Date.now() + 365 * MS_DIA) {
         throw new ErroHttp(400, "Escolha uma data dentro dos próximos 12 meses.");
