@@ -37,7 +37,10 @@
         :data-minima="dataMinima"
         :desabilitado="enviando"
       />
-      <small class="dica">No mínimo 10 minutos a partir de agora.</small>
+      <small v-if="muitoCedo" class="dica dica--erro">
+        Esse horário está muito perto. Escolha a partir de {{ minimoTexto() }} (10 minutos de antecedência).
+      </small>
+      <small v-else class="dica">No mínimo 10 minutos a partir de agora.</small>
       <p class="alerta alerta--info">
         Se mudar de ideia, dá para indeferir em "Aprovações → Respondidas" até o novo horário.
       </p>
@@ -55,7 +58,7 @@
         class="botao"
         :class="acao === 'publicar' ? 'botao--publicar' : 'botao--primario'"
         type="button"
-        :disabled="enviando || (acao === 'agendar' && !horarioValido)"
+        :disabled="enviando || (acao === 'agendar' && !instante)"
         @click="confirmar"
       >
         {{ textoBotao }}
@@ -84,8 +87,21 @@ const emit = defineEmits(["fechar", "concluido"]);
 
 const ANTECEDENCIA_MS = 10 * 60 * 1000;
 
-const data = ref("");
-const hora = ref("");
+/** Sugestão inicial: daqui a 15 minutos, arredondado para os 5 minutos seguintes. */
+function horarioSugerido() {
+  const d = new Date(Date.now() + 15 * 60 * 1000);
+  d.setSeconds(0, 0);
+  d.setMinutes(Math.ceil(d.getMinutes() / 5) * 5);
+  const doisDigitos = (n) => String(n).padStart(2, "0");
+  return {
+    data: `${d.getFullYear()}-${doisDigitos(d.getMonth() + 1)}-${doisDigitos(d.getDate())}`,
+    hora: `${doisDigitos(d.getHours())}:${doisDigitos(d.getMinutes())}`,
+  };
+}
+
+const sugestao = horarioSugerido();
+const data = ref(sugestao.data);
+const hora = ref(sugestao.hora);
 const enviando = ref(false);
 const erro = ref("");
 const dataMinima = dataDeHoje();
@@ -100,6 +116,14 @@ const instante = computed(() => {
 const horarioValido = computed(
   () => Boolean(instante.value) && instante.value.getTime() >= Date.now() + ANTECEDENCIA_MS
 );
+
+/** Data/hora preenchidas, mas antes do mínimo: mostra o aviso em vermelho. */
+const muitoCedo = computed(() => Boolean(instante.value) && !horarioValido.value);
+
+/** Primeiro horário aceito (calculado na hora, não fica em cache). */
+function minimoTexto() {
+  return new Date(Date.now() + ANTECEDENCIA_MS).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+}
 
 const subtitulo = computed(() => {
   const quem = props.pelaEquipe ? "em nome do cliente" : "por você";
@@ -188,6 +212,10 @@ async function confirmar() {
   margin-top: -8px;
   color: #888;
   font-size: 12px;
+}
+
+.dica--erro {
+  color: var(--cor-erro-texto);
 }
 
 .alerta--info {
