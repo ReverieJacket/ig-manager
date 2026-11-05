@@ -15,6 +15,7 @@ const { filaAutomacao } = require("../lib/fila");
 const { publicarNoInstagram } = require("../automacao/instagram/publicar");
 const publicacoesRepository = require("../repositories/publicacoes.repository");
 const contasService = require("./contas.service");
+const contasRepository = require("../repositories/contas.repository");
 
 const { STATUS } = publicacoesRepository;
 const log = criarLogger("Publicador");
@@ -133,6 +134,10 @@ async function executarPublicacao(publicacao) {
         log.info(`Resultado da automação da publicação ${id}`, resultado);
 
         if (resultado.sucesso) {
+            if (conta.sessao_expirada_em) {
+                await contasRepository.limparSessaoExpirada(conta.id).catch(() => {});
+            }
+
             await publicacoesRepository.atualizar(id, {
                 status: STATUS.PUBLICADA,
                 erro: null
@@ -147,6 +152,14 @@ async function executarPublicacao(publicacao) {
         const mensagem = resultado.incerto
             ? `Resultado incerto: ${resultado.mensagem}`
             : resultado.mensagem;
+
+        // O Instagram pediu login: o perfil passa a "Sessão expirada" até ser
+        // reconectado (aparece em Clientes, Criar e no aviso de Postagens).
+        if (resultado.sessaoInvalida) {
+            await contasRepository.marcarSessaoExpirada(conta.id, resultado.mensagem).catch((erro) => {
+                log.aviso(`Não foi possível marcar a sessão expirada da conta ${conta.id}`, formatarErro(erro));
+            });
+        }
 
         await publicacoesRepository.atualizar(id, {
             status: STATUS.ERRO,

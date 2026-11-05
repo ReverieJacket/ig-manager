@@ -10,7 +10,7 @@ import { dataDeHoje } from "../utils/formatadores";
 
 /**
  * @returns Estado e ações do formulário. Principais itens:
- *   - campos: `contaId`, `texto`, `agendar`, `data`, `hora`, `arquivo`, `previa`;
+ *   - campos: `contaIds` (perfis escolhidos), `texto`, `agendar`, `data`, `hora`, `arquivo`, `previa`;
  *   - estado: `formularioValido`, `enviando`, `mensagem`, `sucesso`, `incerto`;
  *   - ações: `escolherArquivo(arquivo)`, `enviar({ agendado })`.
  */
@@ -128,8 +128,8 @@ export function useFormularioPublicacao() {
     if (!formularioValido.value) {
       definirMensagem(
         agendado
-          ? "Selecione pelo menos uma conta, uma imagem, informe a legenda, a data e o horário."
-          : "Selecione pelo menos uma conta, uma imagem e informe a legenda.",
+          ? "Selecione pelo menos um perfil, uma imagem, informe a legenda, a data e o horário."
+          : "Selecione pelo menos um perfil, uma imagem e informe a legenda.",
         false
       );
       return;

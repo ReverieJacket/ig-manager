@@ -12,7 +12,8 @@
     "dev:frontend": "npm run dev -w frontend",
     "build": "npm run build -w frontend",
     "login:instagram": "npm run login:instagram -w backend --",
-    "verificar:conexao": "npm run verificar:conexao -w backend"
+    "verificar:conexao": "npm run verificar:conexao -w backend",
+    "criar:admin": "npm run criar:admin -w backend --"
   },
   "engines": {
     "node": ">=20"

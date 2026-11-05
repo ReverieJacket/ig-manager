@@ -47,11 +47,12 @@ Requisitos: Node 20+.
 npm install
 npx playwright install chromium        # uma vez
 
-cp backend/.env.example backend/.env   # preencha os valores
+cp backend/.env.example backend/.env   # preencha os valores (inclusive AUTH_SEGREDO)
 cp frontend/.env.example frontend/.env
 
-npm run login:instagram                # login manual; salva a sessão
 npm run verificar:conexao              # testa o Supabase
+npm run criar:admin                    # cria o primeiro administrador (pede e-mail, nome e senha)
+npm run login:instagram                # login manual; salva a sessão
 
 npm run dev:backend                    # http://localhost:3000
 npm run dev:frontend                   # http://localhost:5173
@@ -59,21 +60,117 @@ npm run dev:frontend                   # http://localhost:5173
 
 ## Banco de dados (Supabase)
 
-- `contas_instagram`: `id`, `nome`, `username`, `ativo`
+- `clientes`: `id`, `nome`, `ativo`
+- `usuarios`: `id`, `nome`, `email`, `senha_hash`, `perfil` (`admin` | `cliente`), `cliente_id`, `ativo`
+- `contas_instagram` (perfis do Instagram): `id`, `nome`, `username`, `ativo`, `cliente_id`,
+  `sessao_expirada_em`, `sessao_erro` (preenchidos quando o Instagram pede login de novo)
 - `publicacoes`: `id`, `conta_id`, `imagem`, `texto`, `data_hora`, `status`, `erro`
-  - `status`: `agendada` → `publicando` → `publicada` | `erro`
+  - `status`: `agendada` → `publicando` → `publicada` | `erro`; `agendada` ⇄ `recusada`
+    (indeferida pelo cliente)
+  - aprovação (migração 008): `aprovacao` (`pendente` | `deferida` | `indeferida`; nula =
+    publicada na hora), `aprovacao_por`, `aprovacao_pela_equipe`, `aprovacao_em`,
+    `aprovacao_categoria`, `aprovacao_motivo`
+
+## Perfis de acesso
+
+Todo acesso exige login, exceto o link de convite. Execute no Supabase as migrações
+`004_clientes_usuarios.sql`, `005_area_cliente.sql`, `006_excluir_cliente.sql` e
+`007_sessao_expirada.sql`, `008_aprovacoes.sql`, `009_cancelar_publicacao.sql`, `010_retomar_publicacao.sql` e crie o primeiro administrador
+com `npm run criar:admin` (rodar de novo com o mesmo e-mail redefine a senha).
+
+- **Administrador:** Postagens, **Clientes** e Criar. Em *Clientes* fica tudo de cada
+  cliente, em duas abas:
+  - *Perfis do Instagram*: adicionar perfil, **Conectar/Reconectar**, desconectar,
+    renomear, remover e gerar o **Link para o cliente** (validade de 24 h, 3 ou 7 dias)
+    para ele mesmo informar o @;
+  - *Usuários*: adicionar, redefinir senha, alterar e-mail, desativar/reativar.
+
+  O cabeçalho do cliente permite renomear, desativar e excluir (lixeira). Em *Criar*
+  os perfis aparecem agrupados por cliente, com "Todos os perfis conectados".
+- **Cliente** (dono do Instagram): *Minhas postagens* (publicadas e programadas,
+  só leitura), *Meus perfis* (informa o @, sem senha, e conecta o perfil — ver `CONEXAO_PELO_CLIENTE`) e *Meu perfil*. Vê apenas
+  os dados do próprio cliente. Em *Aprovações* defere ou indefere (com motivo) os
+  posts agendados, e pode mudar a resposta até o horário.
+
+**Senhas:** o administrador nunca define nem vê a senha de um cliente. Ao criar um
+usuário ou redefinir a senha, o sistema gera uma **senha temporária** (mostrada uma
+única vez); no primeiro acesso a pessoa é obrigada a criar a dela.
+
+A senha é guardada com scrypt; a sessão é um token assinado em cookie httpOnly
+(8 h, ou 30 dias com "Manter conectado"). Trocar a senha ou o e-mail, redefinir a
+senha ou desativar o usuário encerra as sessões abertas dele. Após 5 senhas erradas,
+o login daquele e-mail fica bloqueado por 15 minutos.
 
 ## API
 
-| Método | Rota | Descrição |
-|---|---|---|
-| GET | `/` | Verificação de saúde |
-| GET | `/contas` | Contas ativas |
-| GET | `/publicacoes` | Publicações com dados da conta |
-| POST | `/publicacoes` | Cria (multipart: `imagem`, `texto`, `dataHora`, `conta_id`) |
-| GET | `/publicacoes/:id` | Uma publicação |
+Rotas sem login: `/`, `/auth/entrar`, `/auth/sair` e o convite
+(`GET /contas/convites/:token`, `POST /contas/convites/:token/cadastro`).
+Quem está com senha temporária só acessa `/auth/*` até criar a própria senha.
+
+| Método | Rota | Quem | Descrição |
+|---|---|---|---|
+| GET | `/` | todos | Verificação de saúde |
+| POST | `/auth/entrar` | todos | Login (`email`, `senha`, `manterConectado`); grava o cookie |
+| POST | `/auth/sair` | todos | Encerra a sessão |
+| GET | `/auth/eu` | logado | Usuário logado |
+| PATCH | `/auth/eu` | logado | Altera o próprio nome |
+| POST | `/auth/trocar-senha` | logado | `senhaAtual`, `senhaNova` (no 1º acesso, só `senhaNova`) |
+| GET | `/clientes` | admin | Clientes com contadores |
+| POST | `/clientes` | admin | Cria cliente + 1º usuário; devolve a senha temporária |
+| GET | `/clientes/:id` | admin | Usuários e perfis do cliente |
+| PATCH | `/clientes/:id` | admin | `nome`, `ativo` |
+| DELETE | `/clientes/:id` | admin | Exclui de vez cliente, usuários e contas; recusado (409) se alguma conta tiver publicações |
+| POST | `/clientes/:id/usuarios` | admin | Novo usuário (senha temporária) |
+| POST | `/clientes/:id/perfis` | admin | Adiciona um perfil (`nome`, `username`) |
+| POST | `/clientes/:id/link` | admin | Link para o cliente informar o @ (`validadeHoras`: 24, 72 ou 168) |
+| GET | `/perfis` | admin | Perfis ativos com cliente e `status` (`conectado`, `aguardando`, `expirada`) |
+| GET | `/perfis/atencao` | admin | Perfis com sessão expirada |
+| PATCH | `/perfis/:id` | admin | Renomeia (`nome`) |
+| DELETE | `/perfis/:id` | admin | Remove; recusado (409) se o perfil tiver publicações |
+| PATCH | `/usuarios/:id` | admin | `nome`, `email`, `ativo` (só usuários cliente) |
+| POST | `/usuarios/:id/redefinir-senha` | admin | Nova senha temporária |
+| GET | `/minha-area/contas` | cliente | Perfis do cliente, com status da conexão |
+| POST | `/minha-area/contas` | cliente | Informa um perfil (`nome`, `username`) |
+| POST | `/minha-area/contas/:id/conectar` | cliente | Abre o Chromium para o login no Instagram (só perfis do próprio cliente; requer `CONEXAO_PELO_CLIENTE`) |
+| GET | `/minha-area/contas/:id/conexao` | cliente | Andamento da conexão |
+| GET | `/minha-area/publicacoes` | cliente | Publicadas e programadas dos perfis do cliente |
+| GET | `/minha-area/aprovacoes` | cliente | `{ pendentes, respondidas }` |
+| POST | `/minha-area/aprovacoes/:id` | cliente | `{ decisao: "deferida" \| "indeferida", categoria, motivo }` |
+| POST | `/minha-area/aprovacoes/deferir` | cliente | `{ ids }`: defere várias |
+| POST | `/minha-area/aprovacoes/:id/retomar` | cliente | Post sem resposta (até 30 dias): `{ acao: "publicar" }` ou `{ acao: "agendar", dataHora }` |
+| GET | `/contas` | admin | Perfis ativos (formato antigo) |
+| POST | `/contas/:id/conectar` | admin | Abre o Chromium para o login no Instagram |
+| GET / DELETE | `/contas/:id/conexao` | admin | Situação da conexão / desconecta |
+| GET | `/publicacoes` | admin | Publicações com dados da conta |
+| POST | `/publicacoes` | admin | Cria (multipart: `imagem`, `texto`, `dataHora`, `conta_id`); publicar agora é recusado (400) se o perfil não estiver conectado; agendada nasce com aprovação pendente |
+| POST | `/publicacoes/:id/retomar` | admin | O mesmo, em nome do cliente |
+| POST | `/publicacoes/:id/cancelar` | admin | Cancela uma agendada/recusada (vira `cancelada`; não apaga) |
+| POST | `/publicacoes/:id/aprovacao` | admin | Responde em nome do cliente (mesmo corpo do cliente) |
+| GET | `/publicacoes/:id` | admin | Uma publicação |
 
 Erros seguem o formato `{ "sucesso": false, "mensagem": "..." }`.
+
+**Aprovações:** toda publicação *agendada* passa pela aprovação do cliente; *publicar
+agora* não. **Só é publicada se estiver deferida**: sem resposta até o horário, o
+prazo se esgota e ela vira *Recusada* (não sai, nem com o servidor atrasado). Indeferida
+também não é publicada (vira *Recusada*); para mudar o conteúdo, crie outra publicação. O cliente pode trocar a
+resposta até o horário, e o administrador pode responder em nome dele (fica
+registrado como "pela equipe"). No horário, o agendador relê o banco e pula as recusadas.
+Post **sem resposta** não se perde: fica 30 dias na aba *Sem resposta* (Aprovações do
+cliente) e no menu ⋯ de Postagens, com **Publicar agora** (exige o perfil conectado) e
+**Agendar** (novo horário, já deferido). Fica registrado quem retomou e o horário original.
+O administrador também pode **cancelar** uma agendada (menu ⋯ em Postagens): ela vira
+*Cancelada*, fica no histórico e o cliente vê "Cancelada pela equipe".
+
+**Conexão pelo cliente:** com `CONEXAO_PELO_CLIENTE=true` (padrão) o cliente vê o
+botão *Conectar* em *Meus perfis*. O Chromium abre **no computador do backend**, então
+isso só faz sentido com tudo na mesma máquina; em servidor, use `false` até existir
+um navegador remoto. Desconectar continua só com o administrador.
+
+**Sessão expirada:** se, ao publicar, o Instagram pedir login ou verificação de
+novo, o perfil é marcado como *Sessão expirada* (`sessao_expirada_em`). Ele aparece
+em vermelho em Clientes, com contador no menu e aviso em Postagens, até ser
+reconectado (a marca é limpa ao conectar, desconectar ou publicar com sucesso).
 
 ## Comentários das publicações
 

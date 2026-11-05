@@ -13,18 +13,19 @@ const contasRepository = require("../repositories/contas.repository");
 const contasService = require("./contas.service");
 const agendador = require("./agendador.service");
 const { executarPublicacao } = require("./publicador.service");
+const { exigirProntoParaPublicar } = require("./perfis.service");
+const { comAutorDaResposta } = require("./aprovacoes.service");
 
-const { STATUS } = publicacoesRepository;
+const { STATUS, APROVACAO } = publicacoesRepository;
 const log = criarLogger("Publicacoes");
 
 /**
- * Lista as publicações já com nome/username da conta e URL pública da imagem.
+ * Completa publicações com nome/username da conta e URL pública da imagem.
  *
+ * @param {object[]} publicacoes
  * @returns {Promise<object[]>}
  */
-async function listarPublicacoes() {
-    const publicacoes = await publicacoesRepository.listar();
-
+async function completarComConta(publicacoes) {
     if (publicacoes.length === 0) return [];
 
     const idsContas = [...new Set(publicacoes.map((p) => p.conta_id))];
@@ -38,11 +39,42 @@ async function listarPublicacoes() {
             ...publicacao,
             conta: conta?.nome || "",
             username: conta?.username || "",
+            cliente_id: conta?.cliente_id ?? null,
+            cliente: conta?.clientes?.nome || "",
             imagem: publicacao.imagem
                 ? `/uploads/${encodeURIComponent(path.basename(publicacao.imagem))}`
                 : null
         };
     });
+}
+
+/**
+ * Lista as publicações já com nome/username da conta e URL pública da imagem.
+ *
+ * @returns {Promise<object[]>}
+ */
+async function listarPublicacoes() {
+    return comAutorDaResposta(await completarComConta(await publicacoesRepository.listar()));
+}
+
+/** Status que o cliente enxerga (erros técnicos ficam só para o admin). */
+const STATUS_VISIVEIS_AO_CLIENTE = [STATUS.AGENDADA, STATUS.PUBLICANDO, STATUS.PUBLICADA];
+
+/**
+ * Publicações das contas de um cliente (área do cliente): programadas,
+ * em andamento e publicadas. Sem o campo `erro`, que é técnico.
+ *
+ * @param {number} clienteId - SEMPRE vindo da sessão.
+ * @returns {Promise<object[]>}
+ */
+async function listarPublicacoesDoCliente(clienteId) {
+    const contas = await contasRepository.listarPorCliente(clienteId);
+    const publicacoes = await publicacoesRepository.listarPorContas(
+        contas.map((c) => c.id),
+        STATUS_VISIVEIS_AO_CLIENTE
+    );
+
+    return (await completarComConta(publicacoes)).map(({ erro, ...resto }) => resto);
 }
 
 /**
@@ -84,6 +116,10 @@ async function criarPublicacao({ arquivo, texto, contaId, dataHora }) {
 
     const agendada = dataHora.getTime() > Date.now();
 
+    // Publicar agora num perfil desconectado/expirado só geraria erro.
+    // Agendar continua permitido: dá tempo de conectar antes do horário.
+    if (!agendada) exigirProntoParaPublicar(conta);
+
     log.info("Registrando nova publicação", {
         contaId,
         username: conta.username,
@@ -91,14 +127,24 @@ async function criarPublicacao({ arquivo, texto, contaId, dataHora }) {
         agendada
     });
 
-    const publicacao = await publicacoesRepository.criar({
-        conta_id: contaId,
-        imagem: arquivo.filename,
-        texto,
-        data_hora: dataHora.toISOString(),
-        status: agendada ? STATUS.AGENDADA : STATUS.PUBLICANDO,
-        erro: null
-    });
+    let publicacao;
+    try {
+        publicacao = await publicacoesRepository.criar({
+            conta_id: contaId,
+            imagem: arquivo.filename,
+            texto,
+            data_hora: dataHora.toISOString(),
+            status: agendada ? STATUS.AGENDADA : STATUS.PUBLICANDO,
+            // Agendada passa pela aprovação do cliente; publicar agora, não.
+            ...(agendada ? { aprovacao: APROVACAO.PENDENTE } : {}),
+            erro: null
+        });
+    } catch (erro) {
+        if (/aprovacao/.test(erro?.message || "")) {
+            throw new ErroHttp(500, "Aprovações indisponíveis: execute a migração 008 no Supabase.");
+        }
+        throw erro;
+    }
 
     log.info(`Publicação registrada: ${publicacao.id}`);
 
@@ -112,4 +158,61 @@ async function criarPublicacao({ arquivo, texto, contaId, dataHora }) {
     return { agendada: false, publicacao, resultado };
 }
 
-module.exports = { listarPublicacoes, buscarPublicacao, criarPublicacao };
+/** Status que o administrador pode cancelar. */
+const STATUS_CANCELAVEIS = [STATUS.AGENDADA, STATUS.RECUSADA];
+
+/**
+ * Cancela uma publicação agendada (ou recusada). Não apaga: o status vira
+ * `cancelada`, com quem e quando, e o agendamento é desfeito.
+ *
+ * @param {number} id
+ * @param {{id: number}} admin - Usuário da sessão.
+ * @returns {Promise<object>} A publicação atualizada.
+ */
+async function cancelarPublicacao(id, admin) {
+    const publicacao = await buscarPublicacao(id);
+
+    if (publicacao.status === STATUS.CANCELADA) {
+        throw new ErroHttp(409, "Esta publicação já foi cancelada.");
+    }
+
+    if (!STATUS_CANCELAVEIS.includes(publicacao.status)) {
+        throw new ErroHttp(409, "Só dá para cancelar publicações agendadas que ainda não saíram.");
+    }
+
+    let atualizada;
+    try {
+        atualizada = await publicacoesRepository.atualizarSeStatus(
+            id,
+            {
+                status: STATUS.CANCELADA,
+                cancelada_por: admin.id,
+                cancelada_em: new Date().toISOString()
+            },
+            STATUS_CANCELAVEIS
+        );
+    } catch (erro) {
+        if (/cancelada|check constraint|violates/i.test(erro?.message || "")) {
+            throw new ErroHttp(500, "Cancelamento indisponível: execute a migração 009 no Supabase.");
+        }
+        throw erro;
+    }
+
+    if (!atualizada) {
+        throw new ErroHttp(409, "A publicação acabou de começar a sair e não pode mais ser cancelada.");
+    }
+
+    agendador.cancelar(id);
+    log.info(`Publicação ${id} cancelada`, { por: admin.id });
+
+    return atualizada;
+}
+
+module.exports = {
+    cancelarPublicacao,
+    completarComConta,
+    listarPublicacoes,
+    listarPublicacoesDoCliente,
+    buscarPublicacao,
+    criarPublicacao
+};

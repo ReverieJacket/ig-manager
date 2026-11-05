@@ -8,6 +8,11 @@
  * GET  /publicacoes/:id/comentarios - comentários (?pagina, ?limite, ?incluirRemovidos).
  * POST /publicacoes/:id/comentarios/coletar - coleta agora no Instagram (demora).
  * PATCH /publicacoes/:id/instagram - define o código/URL do post no Instagram.
+ * POST /publicacoes/:id/retomar - post sem resposta: publicar agora ou
+ *                         agendar de novo, EM NOME DO CLIENTE.
+ * POST /publicacoes/:id/cancelar - cancela uma agendada/recusada (não apaga).
+ * POST /publicacoes/:id/aprovacao - responde EM NOME DO CLIENTE
+ *                         ({ decisao, categoria?, motivo? }).
  *
  * As rotas apenas traduzem HTTP <-> serviço: validam a entrada e
  * escolhem o status da resposta.
@@ -23,6 +28,8 @@ const {
 } = require("../validators/publicacoes.validator");
 const publicacoesService = require("../services/publicacoes.service");
 const comentariosService = require("../services/comentarios.service");
+const aprovacoesService = require("../services/aprovacoes.service");
+const retomadaService = require("../services/retomada.service");
 
 const router = Router();
 
@@ -93,6 +100,24 @@ router.patch("/:id/instagram", async (req, res) => {
     await comentariosService.definirCodigoPost(id, codigo);
 
     res.json({ sucesso: true, ig_codigo: codigo });
+});
+
+router.post("/:id/retomar", async (req, res) => {
+    const id = validarId(req.params.id, "ID de publicação inválido.");
+    const publicacao = await retomadaService.retomar(id, req.body, req.usuario);
+    res.status(202).json({ sucesso: true, status: publicacao.status, dataHora: publicacao.data_hora });
+});
+
+router.post("/:id/cancelar", async (req, res) => {
+    const id = validarId(req.params.id, "ID de publicação inválido.");
+    const publicacao = await publicacoesService.cancelarPublicacao(id, req.usuario);
+    res.json({ sucesso: true, status: publicacao.status });
+});
+
+router.post("/:id/aprovacao", async (req, res) => {
+    const id = validarId(req.params.id, "ID de publicação inválido.");
+    const publicacao = await aprovacoesService.responder(id, req.body, req.usuario);
+    res.json({ sucesso: true, aprovacao: publicacao.aprovacao, status: publicacao.status });
 });
 
 module.exports = router;

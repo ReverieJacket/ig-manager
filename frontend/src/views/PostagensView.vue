@@ -7,13 +7,26 @@
     <div class="page-header header-linha">
       <div>
         <h1>Postagens</h1>
-        <p>Acompanhe suas publicações do Instagram.</p>
+        <p>Acompanhe as publicações e as respostas dos clientes.</p>
       </div>
 
       <router-link to="/criar" class="botao botao--primario create-button">
         <span>+</span>
         Criar
       </router-link>
+    </div>
+
+    <div v-if="perfisEmAtencao.length" class="alerta alerta--erro faixa-atencao" role="alert">
+      <div>
+        <strong>
+          {{ perfisEmAtencao.length === 1 ? "1 perfil precisa ser reconectado" : `${perfisEmAtencao.length} perfis precisam ser reconectados` }}
+        </strong>
+        <span>
+          A sessão do Instagram expirou e as publicações nesses perfis estão paradas:
+          {{ perfisEmAtencao.map((p) => `@${p.username}${p.cliente ? ` (${p.cliente.nome})` : ""}`).join(", ") }}.
+        </span>
+      </div>
+      <router-link to="/clientes" class="botao botao--secundario botao--pequeno">Ver em Clientes</router-link>
     </div>
 
     <ResumoPublicacoes :contagens="contagens" />
@@ -33,15 +46,17 @@
         </div>
 
         <div class="toolbar-right">
+          <select v-model="cliente" class="campo filtro-cliente" aria-label="Filtrar por cliente">
+            <option value="">Todos os clientes</option>
+            <option v-for="c in clientes" :key="c.id" :value="c.id">{{ c.nome }} ({{ c.total }})</option>
+          </select>
+
           <input
             v-model="busca"
             class="campo"
             type="text"
             placeholder="Pesquisar..."
           />
-
-          <!-- Placeholder: filtros avançados ainda não implementados. -->
-          <button class="botao botao--secundario" type="button">Filtros</button>
         </div>
       </div>
 
@@ -60,8 +75,73 @@
         v-else
         :publicacoes="filtradas"
         @comentarios="publicacaoAberta = $event"
+        @aprovacao="responderPeloClienteNaTela"
+        @cancelar="abrirCancelar"
+        @retomar="retomando = $event"
       />
     </section>
+
+    <p v-if="aviso.texto" class="alerta toast" :class="`alerta--${aviso.tipo}`" role="status">{{ aviso.texto }}</p>
+
+    <ModalIndeferir
+      v-if="indeferindo"
+      :publicacao="indeferindo"
+      pela-equipe
+      :enviar="(motivo) => responderPeloCliente(indeferindo.id, { decisao: APROVACAO.INDEFERIDA, ...motivo })"
+      @fechar="indeferindo = null"
+      @concluido="aoIndeferir"
+    />
+
+    <ModalBase
+      v-if="deferindo"
+      titulo="Deferir pelo cliente"
+      :travada="salvandoDeferir"
+      @fechar="deferindo = null"
+    >
+      <p v-if="erroDeferir" class="alerta alerta--erro">{{ erroDeferir }}</p>
+      <p class="texto-modal">
+        O post de <strong>@{{ deferindo.username }}</strong> será publicado em
+        <strong>{{ formatarData(deferindo.data_hora) }}</strong>. Fica registrado que a equipe deferiu
+        em nome do cliente (ex.: ele aprovou por WhatsApp). O cliente ainda pode mudar até o horário.
+      </p>
+      <template #rodape>
+        <button class="botao botao--secundario" type="button" :disabled="salvandoDeferir" @click="deferindo = null">Cancelar</button>
+        <button class="botao botao--primario" type="button" :disabled="salvandoDeferir" @click="confirmarDeferir">
+          {{ salvandoDeferir ? "Deferindo..." : "✓ Deferir pelo cliente" }}
+        </button>
+      </template>
+    </ModalBase>
+
+    <ModalBase
+      v-if="cancelando"
+      titulo="Cancelar publicação"
+      :travada="salvandoCancelar"
+      @fechar="cancelando = null"
+    >
+      <p v-if="erroCancelar" class="alerta alerta--erro">{{ erroCancelar }}</p>
+      <p class="texto-modal">
+        O post de <strong>@{{ cancelando.username }}</strong> programado para
+        <strong>{{ formatarData(cancelando.data_hora) }}</strong> <strong>não será publicado</strong>.
+        Ele continua no histórico como "Cancelada" e o cliente vê que foi cancelado pela equipe.
+      </p>
+      <p class="texto-modal aviso-cancelar">Não dá para desfazer: para publicar depois, crie uma nova publicação.</p>
+      <template #rodape>
+        <button class="botao botao--secundario" type="button" :disabled="salvandoCancelar" @click="cancelando = null">Voltar</button>
+        <button class="botao botao--perigo" type="button" :disabled="salvandoCancelar" @click="confirmarCancelar">
+          {{ salvandoCancelar ? "Cancelando..." : "Cancelar publicação" }}
+        </button>
+      </template>
+    </ModalBase>
+
+    <ModalRetomar
+      v-if="retomando"
+      :publicacao="retomando.publicacao"
+      :acao="retomando.acao"
+      pela-equipe
+      :enviar="(dados) => retomarPeloCliente(retomando.publicacao.id, dados)"
+      @fechar="retomando = null"
+      @concluido="aoRetomar"
+    />
 
     <ModalComentarios
       :publicacao="publicacaoAberta"
@@ -72,19 +152,114 @@
 </template>
 
 <script setup>
-import { ref } from "vue";
+import { onMounted, reactive, ref } from "vue";
 
+import ModalBase from "../components/comum/ModalBase.vue";
 import ModalComentarios from "../components/publicacoes/ModalComentarios.vue";
+import ModalIndeferir from "../components/publicacoes/ModalIndeferir.vue";
+import ModalRetomar from "../components/publicacoes/ModalRetomar.vue";
+import { cancelarPublicacao, responderPeloCliente, retomarPeloCliente } from "../api/publicacoes";
 import ResumoPublicacoes from "../components/publicacoes/ResumoPublicacoes.vue";
 import TabelaPublicacoes from "../components/publicacoes/TabelaPublicacoes.vue";
-import { ABAS_FILTRO } from "../constants/publicacoes";
+import { ABAS_FILTRO, APROVACAO } from "../constants/publicacoes";
+import { formatarData } from "../utils/formatadores";
+import { useAlertasPerfis } from "../composables/useAlertasPerfis";
 import { usePublicacoes } from "../composables/usePublicacoes";
 
-const { carregando, erro, filtro, busca, filtradas, contagens, carregar } =
+const { carregando, erro, filtro, busca, cliente, clientes, filtradas, contagens, carregar } =
   usePublicacoes();
+
+const { perfisEmAtencao, atualizar: atualizarAlertas } = useAlertasPerfis();
+onMounted(() => atualizarAlertas({ forcar: true }));
 
 /** Publicação cujos comentários estão abertos no modal (`null` = fechado). */
 const publicacaoAberta = ref(null);
+
+/* ---------------- resposta da aprovação em nome do cliente ---------------- */
+
+const indeferindo = ref(null);
+const deferindo = ref(null);
+const salvandoDeferir = ref(false);
+const erroDeferir = ref("");
+const aviso = reactive({ tipo: "", texto: "" });
+
+function avisar(tipo, texto) {
+  aviso.tipo = tipo;
+  aviso.texto = texto;
+  setTimeout(() => { if (aviso.texto === texto) aviso.texto = ""; }, 5000);
+}
+
+function responderPeloClienteNaTela({ publicacao, decisao }) {
+  erroDeferir.value = "";
+  if (decisao === APROVACAO.INDEFERIDA) indeferindo.value = publicacao;
+  else deferindo.value = publicacao;
+}
+
+async function confirmarDeferir() {
+  salvandoDeferir.value = true;
+  erroDeferir.value = "";
+  try {
+    await responderPeloCliente(deferindo.value.id, { decisao: APROVACAO.DEFERIDA });
+    avisar("sucesso", `Deferida pelo cliente: @${deferindo.value.username} será publicada no horário.`);
+    deferindo.value = null;
+    await carregar({ silencioso: true });
+  } catch (e) {
+    erroDeferir.value = e.message || "Não foi possível deferir.";
+  } finally {
+    salvandoDeferir.value = false;
+  }
+}
+
+/* ---------------- sem resposta: publicar/agendar pelo cliente --------------- */
+
+const retomando = ref(null);
+
+async function aoRetomar({ acao, dataHora }) {
+  const p = retomando.value.publicacao;
+  retomando.value = null;
+  avisar(
+    "sucesso",
+    acao === "publicar"
+      ? `Publicando o post de @${p.username} (leva cerca de 1 minuto).`
+      : `Post de @${p.username} agendado para ${formatarData(dataHora)}, já deferido.`
+  );
+  await carregar({ silencioso: true });
+  // Atualiza de novo quando a publicação deve ter terminado.
+  if (acao === "publicar") setTimeout(() => carregar({ silencioso: true }), 70000);
+}
+
+/* -------------------------------- cancelar -------------------------------- */
+
+const cancelando = ref(null);
+const salvandoCancelar = ref(false);
+const erroCancelar = ref("");
+
+function abrirCancelar(publicacao) {
+  erroCancelar.value = "";
+  cancelando.value = publicacao;
+}
+
+async function confirmarCancelar() {
+  salvandoCancelar.value = true;
+  erroCancelar.value = "";
+  try {
+    await cancelarPublicacao(cancelando.value.id);
+    avisar("sucesso", `Publicação de @${cancelando.value.username} cancelada.`);
+    cancelando.value = null;
+    await carregar({ silencioso: true });
+  } catch (e) {
+    erroCancelar.value = e.message || "Não foi possível cancelar.";
+  } finally {
+    salvandoCancelar.value = false;
+  }
+}
+
+async function aoIndeferir() {
+  const p = indeferindo.value;
+  indeferindo.value = null;
+  avisar("sucesso", `Indeferida pelo cliente: o post de @${p.username} não será publicado.`);
+  await carregar({ silencioso: true });
+}
 </script>
 
 <style scoped>
@@ -114,6 +289,53 @@ const publicacaoAberta = ref(null);
 
 .cartao {
   overflow: hidden;
+}
+
+.toast {
+  position: fixed;
+  right: 28px;
+  bottom: 24px;
+  z-index: 70;
+  max-width: 420px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+}
+
+.texto-modal {
+  margin: 0;
+  color: #444;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.aviso-cancelar {
+  margin-top: 10px;
+  color: #777;
+  font-size: 13px;
+}
+
+.faixa-atencao {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.faixa-atencao strong {
+  display: block;
+  margin-bottom: 2px;
+}
+
+.faixa-atencao .botao {
+  flex: none;
+  text-decoration: none;
+}
+
+.filtro-cliente {
+  width: 190px;
+  padding: 9px 11px;
+  border-radius: 7px;
+  background: #fff;
 }
 
 .posts-toolbar {
@@ -155,7 +377,7 @@ const publicacaoAberta = ref(null);
   gap: 8px;
 }
 
-.toolbar-right .campo {
+.toolbar-right input.campo {
   width: 180px;
   padding: 9px 11px;
   border-radius: 7px;
@@ -185,33 +407,75 @@ const publicacaoAberta = ref(null);
 @media (max-width: 950px) {
   .posts-toolbar {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
     gap: 12px;
-    padding: 15px;
+    padding: 14px;
+  }
+
+  .tabs {
+    width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tabs button {
+    flex: none;
+    white-space: nowrap;
   }
 
   .toolbar-right {
     width: 100%;
   }
 
-  .toolbar-right .campo {
+  .toolbar-right .campo,
+  .toolbar-right input.campo,
+  .filtro-cliente {
     flex: 1;
+    width: auto;
+    min-width: 0;
   }
 }
 
 @media (max-width: 600px) {
   .header-linha {
+    align-items: center;
+    gap: 12px;
+  }
+
+  .header-linha p {
+    display: none;
+  }
+
+  .create-button {
+    flex: none;
+    padding: 10px 14px;
+  }
+
+  .faixa-atencao {
     flex-direction: column;
-    gap: 18px;
+    align-items: stretch;
+    gap: 10px;
   }
 
-  .tabs {
-    width: 100%;
-    overflow-x: auto;
+  .toolbar-right {
+    flex-direction: column;
   }
 
-  .tabs button {
-    white-space: nowrap;
+  .toast {
+    right: 14px;
+    bottom: 14px;
+    left: 14px;
+    max-width: none;
+  }
+
+  .state {
+    min-height: 160px;
+    padding: 0 16px;
+    text-align: center;
   }
 }
 </style>

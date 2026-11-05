@@ -1,7 +1,7 @@
 <!--
   Tela "Criar": formulário para publicar agora ou agendar.
-  Estado e envio ficam em `useFormularioPublicacao`; a lista de contas
-  em `useContas`.
+  Estado e envio ficam em `useFormularioPublicacao`; os perfis vêm de
+  GET /perfis (agrupados por cliente em `SeletorPerfis`).
 -->
 <template>
   <div class="create-page">
@@ -11,25 +11,23 @@
     </div>
 
     <section class="cartao create-card">
-      <!-- Contas do Instagram -->
+      <!-- Perfis do Instagram -->
       <div class="form-section">
-        <label>Contas do Instagram</label>
-        <div class="account-selection" :aria-busy="carregandoContas">
-          <label v-for="conta in contas" :key="conta.id" class="account-option">
-            <input
-              v-model="form.contaIds.value"
-              type="checkbox"
-              :value="String(conta.id)"
-              :disabled="carregandoContas || form.enviando.value"
-            />
-            <span>{{ conta.nome }} (@{{ conta.username }})</span>
-          </label>
-        </div>
-        <small v-if="erroContas" class="field-error">{{ erroContas }}</small>
-        <small v-else-if="!carregandoContas && contas.length === 0" class="field-warning">
-          Nenhuma conta ativa cadastrada. Cadastre uma conta no Supabase.
+        <label>Perfis do Instagram</label>
+        <SeletorPerfis
+          v-model="form.contaIds.value"
+          :perfis="perfis"
+          :carregando="carregandoPerfis"
+          :desabilitado="form.enviando.value"
+          :permitir-nao-conectados="form.agendar.value"
+        />
+        <small v-if="erroPerfis" class="field-error">{{ erroPerfis }}</small>
+        <small v-else class="field-hint">
+          Selecione um ou mais perfis para publicar o mesmo conteúdo.
+          <template v-if="!form.agendar.value && perfis.some((p) => p.status !== 'conectado')">
+            Perfis sem conexão só podem receber publicação agendada.
+          </template>
         </small>
-        <small v-else class="field-hint">Selecione uma ou mais contas para publicar o mesmo conteúdo.</small>
       </div>
 
       <!-- Imagem -->
@@ -66,7 +64,7 @@
         :disabled="bloqueado"
         @click="form.enviar({ agendado: false })"
       >
-        {{ form.enviando.value ? "Processando..." : "Publicar Agora" }}
+        {{ form.enviando.value ? "Processando..." : textoPublicar }}
       </button>
 
       <!-- Agendamento -->
@@ -87,6 +85,12 @@
             :data-minima="form.dataMinima.value"
             :desabilitado="form.enviando.value"
           />
+
+          <p class="aviso-aprovacao">
+            O cliente precisa <strong>deferir</strong> em "Aprovações" até o horário.
+            Sem resposta até lá, a publicação <strong>não sai</strong>. Se ele aprovar por fora,
+            use "Deferir pelo cliente" em Postagens.
+          </p>
 
           <button
             type="button"
@@ -126,29 +130,46 @@
 </template>
 
 <script setup>
-import { computed, watch } from "vue";
+import { computed, onMounted, ref } from "vue";
 
 import CampoAgendamento from "../components/publicacoes/CampoAgendamento.vue";
+import SeletorPerfis from "../components/publicacoes/SeletorPerfis.vue";
 import UploadImagem from "../components/publicacoes/UploadImagem.vue";
+import { listarPerfis } from "../api/perfis";
 import { LIMITE_LEGENDA } from "../constants/publicacoes";
-import { useContas } from "../composables/useContas";
 import { useFormularioPublicacao } from "../composables/useFormularioPublicacao";
 
 const form = useFormularioPublicacao();
-const { contas, carregando: carregandoContas, erro: erroContas } = useContas();
+
+const perfis = ref([]);
+const carregandoPerfis = ref(true);
+const erroPerfis = ref("");
+
+onMounted(async () => {
+  try {
+    perfis.value = await listarPerfis();
+    // Com um único perfil conectado, já o deixa selecionado.
+    const conectados = perfis.value.filter((p) => p.status === "conectado");
+    if (conectados.length === 1) form.contaIds.value = [String(conectados[0].id)];
+  } catch (e) {
+    erroPerfis.value = e.message || "Não foi possível carregar os perfis.";
+  } finally {
+    carregandoPerfis.value = false;
+  }
+});
+
+const textoPublicar = computed(() => {
+  const n = form.contaIds.value.length;
+  return n > 1 ? `Publicar agora em ${n} perfis` : "Publicar agora";
+});
 
 /** Botões de envio ficam bloqueados enquanto houver pendência. */
 const bloqueado = computed(
   () =>
     !form.formularioValido.value ||
     form.enviando.value ||
-    carregandoContas.value
+    carregandoPerfis.value
 );
-
-// Com uma única conta ativa, já a deixa selecionada.
-watch(contas, (lista) => {
-  if (lista.length === 1) form.contaIds.value = [String(lista[0].id)];
-});
 </script>
 
 <style scoped>
@@ -202,22 +223,10 @@ textarea.campo {
   font-size: 12px;
 }
 
-.account-selection {
-  display: grid;
-  gap: 9px;
-  padding: 12px;
-  border: 1px solid var(--cor-borda, #ddd);
-  border-radius: 8px;
+.field-hint {
+  color: #777;
+  font-size: 12px;
 }
-.account-option {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  font-size: 13px;
-  cursor: pointer;
-}
-.account-option input { accent-color: var(--cor-primaria); }
-.field-hint { color: #777; font-size: 12px; }
 
 .field-warning {
   color: #946200;
@@ -242,6 +251,16 @@ textarea.campo {
   width: 15px;
   height: 15px;
   accent-color: var(--cor-primaria);
+}
+
+.aviso-aprovacao {
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fff6e0;
+  color: #7a5200;
+  font-size: 12.5px;
+  line-height: 1.5;
 }
 
 .schedule-button {
@@ -287,7 +306,7 @@ textarea.campo {
 
 @media (max-width: 650px) {
   .create-page {
-    padding: 0 12px 24px;
+    padding: 0 0 24px;
   }
 
   .page-header h1 {
