@@ -41,7 +41,7 @@ router.get("/contas", async (req, res) => {
     res.json(
         contas
             .filter((c) => c.ativo)
-            .map((c) => ({ ...contaComStatus(c), podeConectar: config.conexaoPeloCliente }))
+            .map((c) => ({ ...contaComStatus(c), podeConectar: config.conexaoPeloCliente && config.conexaoNoServidor }))
     );
 });
 
@@ -50,7 +50,7 @@ router.get("/contas", async (req, res) => {
  * (igual a inexistente, para não revelar ids de terceiros).
  */
 async function perfilDoCliente(req) {
-    if (!config.conexaoPeloCliente) {
+    if (!config.conexaoPeloCliente || !config.conexaoNoServidor) {
         throw new ErroHttp(403, "A conexão do perfil é feita pela equipe. Entre em contato com ela.");
     }
 
@@ -79,7 +79,7 @@ router.post("/contas", async (req, res) => {
         nome: req.body?.nome,
         username: req.body?.username
     });
-    res.status(201).json({ sucesso: true, conta: { ...conta, conectada: false, status: "aguardando", podeConectar: config.conexaoPeloCliente } });
+    res.status(201).json({ sucesso: true, conta: { ...conta, conectada: false, status: "aguardando", podeConectar: config.conexaoPeloCliente && config.conexaoNoServidor } });
 });
 
 router.get("/publicacoes", async (req, res) => {

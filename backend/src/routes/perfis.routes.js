@@ -5,6 +5,10 @@
  *                           (tela Criar).
  * GET    /perfis/atencao  - perfis com sessão expirada (contador do menu e
  *                           aviso em Postagens).
+ * GET    /perfis/config   - { conexaoNoServidor }: se o "Conectar" abre o
+ *                           Chromium aqui ou se a conexão é por arquivo.
+ * POST   /perfis/:id/sessao - multipart `arquivo`: envia o conta-<id>.json
+ *                           gerado pelo login:instagram (servidor sem tela).
  * PATCH  /perfis/:id      - { nome } -> renomeia o perfil.
  * DELETE /perfis/:id      - remove (recusado se houver publicações).
  *
@@ -15,6 +19,10 @@ const { Router } = require("express");
 
 const { validarId } = require("../validators/publicacoes.validator");
 const perfisService = require("../services/perfis.service");
+const sessaoImportada = require("../services/sessao-importada.service");
+const { uploadSessao } = require("../middlewares/upload");
+const { ErroHttp } = require("../lib/erros");
+const { config } = require("../config/env");
 
 const router = Router();
 
@@ -24,6 +32,16 @@ router.get("/", async (req, res) => {
 
 router.get("/atencao", async (req, res) => {
     res.json(await perfisService.listarEmAtencao());
+});
+
+router.get("/config", (req, res) => {
+    res.json({ conexaoNoServidor: config.conexaoNoServidor });
+});
+
+router.post("/:id/sessao", uploadSessao, async (req, res) => {
+    const id = validarId(req.params.id, "ID de perfil inválido.");
+    if (!req.file) throw new ErroHttp(400, "Escolha o arquivo de sessão (conta-<id>.json).");
+    res.json({ sucesso: true, ...(await sessaoImportada.importar(id, req.file.buffer)) });
 });
 
 router.patch("/:id", async (req, res) => {

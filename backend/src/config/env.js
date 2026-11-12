@@ -80,6 +80,20 @@ const config = {
      */
     conexaoPeloCliente: process.env.CONEXAO_PELO_CLIENTE !== "false",
 
+    /**
+     * Se o botão "Conectar" abre o Chromium NESTA máquina para o login no
+     * Instagram. Só faz sentido onde há uma tela (o computador de quem
+     * usa). Num servidor sem tela (Oracle, EC2) use CONEXAO_NO_SERVIDOR=false:
+     * a conexão passa a ser feita enviando o arquivo de sessão gerado no
+     * computador (`npm run login:instagram`). Padrão: ligado.
+     */
+    conexaoNoServidor: process.env.CONEXAO_NO_SERVIDOR !== "false",
+
+    /** Arquivo de sessão enviado pelo site (Clientes → Enviar sessão). */
+    sessaoImportada: {
+        tamanhoMaximoBytes: 1024 * 1024
+    },
+
     upload: {
         tamanhoMaximoBytes: 15 * 1024 * 1024,
         tiposPermitidos: ["image/jpeg", "image/png", "image/webp"]

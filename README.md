@@ -58,6 +58,16 @@ npm run dev:backend                    # http://localhost:3000
 npm run dev:frontend                   # http://localhost:5173
 ```
 
+## Colocar no ar (servidor)
+
+Passo a passo para a Oracle Cloud Always Free, com instalação automática e
+HTTPS sem domínio próprio: [`deploy/oracle/README.md`](deploy/oracle/README.md).
+
+No servidor (sem tela), `CONEXAO_NO_SERVIDOR=false`: o "Conectar" do
+Instagram vira **Enviar sessão** — o login é feito no computador com
+`npm run login:instagram -- --conta <id>` e o arquivo gerado é enviado em
+Clientes → ⋯ → Enviar sessão (`POST /perfis/:id/sessao`, só administrador).
+
 ## Banco de dados (Supabase)
 
 - `clientes`: `id`, `nome`, `ativo`
@@ -125,6 +135,8 @@ Quem está com senha temporária só acessa `/auth/*` até criar a própria senh
 | POST | `/clientes/:id/link` | admin | Link para o cliente informar o @ (`validadeHoras`: 24, 72 ou 168) |
 | GET | `/perfis` | admin | Perfis ativos com cliente e `status` (`conectado`, `aguardando`, `expirada`) |
 | GET | `/perfis/atencao` | admin | Perfis com sessão expirada |
+| GET | `/perfis/config` | admin | `{ conexaoNoServidor }` |
+| POST | `/perfis/:id/sessao` | admin | Multipart `arquivo`: sessão do Instagram gerada pelo `login:instagram` |
 | PATCH | `/perfis/:id` | admin | Renomeia (`nome`) |
 | DELETE | `/perfis/:id` | admin | Remove; recusado (409) se o perfil tiver publicações |
 | PATCH | `/usuarios/:id` | admin | `nome`, `email`, `ativo` (só usuários cliente) |

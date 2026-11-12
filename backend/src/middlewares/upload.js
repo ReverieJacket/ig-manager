@@ -42,4 +42,13 @@ const uploadImagem = multer({
     }
 }).single("imagem");
 
-module.exports = { uploadImagem };
+/**
+ * Arquivo de sessão do Instagram (campo `arquivo`), mantido só na memória:
+ * é conferido e gravado pelo `sessao-importada.service`, nunca em uploads/.
+ */
+const uploadSessao = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: config.sessaoImportada.tamanhoMaximoBytes, files: 1 }
+}).single("arquivo");
+
+module.exports = { uploadImagem, uploadSessao };

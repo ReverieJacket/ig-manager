@@ -6,6 +6,8 @@ const fs = require("fs");
 const path = require("path");
 const { chromium } = require("playwright");
 const { obterArquivoSessao } = require("../automacao/instagram/sessao");
+const { config } = require("../config/env");
+const { ErroHttp } = require("../lib/erros");
 const contasService = require("./contas.service");
 const contasRepository = require("../repositories/contas.repository");
 
@@ -15,6 +17,13 @@ async function iniciar(contaId) {
   const id = Number(contaId);
   if (!Number.isSafeInteger(id) || id <= 0) {
     const e = new Error("ID da conta invalido."); e.status = 400; throw e;
+  }
+  if (!config.conexaoNoServidor) {
+    throw new ErroHttp(
+      409,
+      "Neste servidor não há tela para abrir o Instagram. Conecte o perfil no seu computador " +
+      "(npm run login:instagram -- --conta " + id + ") e use \"Enviar sessão\" no menu ⋯ do perfil."
+    );
   }
   const conta = await contasService.buscarContaAtiva(id);
   if (!conta) { const e = new Error("Conta nao encontrada ou inativa."); e.status = 404; throw e; }

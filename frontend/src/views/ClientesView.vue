@@ -135,13 +135,22 @@
 
                 <div class="acao-principal">
                   <button
-                    v-if="perfil.status !== 'conectado'"
+                    v-if="perfil.status !== 'conectado' && !conexaoPorArquivo"
                     class="botao botao--primario botao--pequeno"
                     type="button"
                     :disabled="emAndamento(perfil.id) || !detalhe.cliente.ativo"
                     @click="conectar(perfil)"
                   >
                     {{ emAndamento(perfil.id) ? "Aguardando login..." : perfil.status === "expirada" ? "Reconectar" : "Conectar" }}
+                  </button>
+                  <button
+                    v-else-if="perfil.status !== 'conectado'"
+                    class="botao botao--primario botao--pequeno"
+                    type="button"
+                    :disabled="!detalhe.cliente.ativo"
+                    @click="enviandoSessao = perfil"
+                  >
+                    ⬆ Enviar sessão
                   </button>
                 </div>
 
@@ -236,6 +245,14 @@
         </button>
       </template>
     </ModalBase>
+
+    <!-- Enviar arquivo de sessão (servidor sem tela) -->
+    <ModalEnviarSessao
+      v-if="enviandoSessao"
+      :perfil="enviandoSessao"
+      @fechar="enviandoSessao = null"
+      @concluido="aoEnviarSessao"
+    />
 
     <!-- Link para o cliente -->
     <ModalBase
@@ -421,6 +438,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 
 import MenuAcoes from "../components/comum/MenuAcoes.vue";
 import ModalBase from "../components/comum/ModalBase.vue";
+import ModalEnviarSessao from "../components/perfis/ModalEnviarSessao.vue";
 import {
   adicionarUsuario,
   atualizarCliente,
@@ -432,7 +450,7 @@ import {
   redefinirSenha,
 } from "../api/clientes";
 import { conectarInstagram, consultarConexao, desconectarInstagram } from "../api/contas";
-import { adicionarPerfil, gerarLinkCliente, removerPerfil, renomearPerfil } from "../api/perfis";
+import { adicionarPerfil, gerarLinkCliente, obterConfigPerfis, removerPerfil, renomearPerfil } from "../api/perfis";
 import { useAlertasPerfis } from "../composables/useAlertasPerfis";
 import { formatarData } from "../utils/formatadores";
 
@@ -585,6 +603,11 @@ const acoesCliente = computed(() => {
 
 function acoesPerfil(perfil) {
   return [
+    {
+      rotulo: "⬆ Enviar sessão (arquivo)",
+      acao: () => { enviandoSessao.value = perfil; },
+      desabilitado: !detalhe.value?.cliente.ativo,
+    },
     {
       rotulo: "Desconectar",
       acao: () => confirmarDesconectar(perfil),
@@ -948,7 +971,24 @@ async function conectar(perfil) {
   );
 }
 
-onMounted(carregarLista);
+/* ------------------- conexão por arquivo (servidor sem tela) ------------------- */
+
+/** No servidor sem tela, "Conectar" vira "Enviar sessão". */
+const conexaoPorArquivo = ref(false);
+const enviandoSessao = ref(null);
+
+async function aoEnviarSessao(r) {
+  enviandoSessao.value = null;
+  delete conexao.value[r.contaId];
+  await recarregar();
+}
+
+onMounted(() => {
+  carregarLista();
+  obterConfigPerfis()
+    .then((c) => { conexaoPorArquivo.value = c?.conexaoNoServidor === false; })
+    .catch(() => {});
+});
 onBeforeUnmount(() => {
   for (const id of [...intervalos.keys()]) pararAcompanhamento(id);
 });

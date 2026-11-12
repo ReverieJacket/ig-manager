@@ -41,7 +41,7 @@ function tratarErros(erro, req, res, next) {
     if (erro instanceof multer.MulterError) {
         return res.status(400).json({
             sucesso: false,
-            mensagem: erro.message
+            mensagem: erro.code === "LIMIT_FILE_SIZE" ? "O arquivo enviado é grande demais." : erro.message
         });
     }
 
