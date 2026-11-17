@@ -159,8 +159,12 @@ export function useFormularioPublicacao() {
       }
       const concluidas = resultados.filter((item) => item.sucesso).length;
       const falhas = resultados.length - concluidas;
+      // Mesmo motivo para todas (ex.: Publicador desligado): mostra o motivo.
+      const motivos = [...new Set(resultados.filter((item) => !item.sucesso).map((item) => item.mensagem))];
       definirMensagem(
-        falhas === 0
+        concluidas === 0 && motivos.length === 1
+          ? motivos[0]
+          : falhas === 0
           ? agendado
             ? `${concluidas} publicação(ões) agendada(s) com sucesso.`
             : `${concluidas} publicação(ões) enviada(s): saem em instantes. Acompanhe o resultado em Postagens.`

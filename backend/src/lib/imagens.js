@@ -96,4 +96,46 @@ async function caminhoLocal(nome) {
     return arquivo;
 }
 
-module.exports = { gerarNome, guardarEnviada, linkTemporario, caminhoLocal };
+/**
+ * Envia ao Storage as imagens que só existem neste computador (postagens
+ * criadas antes do site ir para a Vercel), para as miniaturas aparecerem
+ * no site. Lembra o que já enviou em storage/imagens-no-storage.json.
+ *
+ * @param {string[]} nomes - Valores da coluna `imagem`.
+ * @returns {Promise<number>} Quantas foram enviadas agora.
+ */
+async function enviarLocaisAoStorage(nomes) {
+    const registro = path.join(config.diretorios.storage, "imagens-no-storage.json");
+    let enviadas = [];
+    try {
+        enviadas = JSON.parse(fs.readFileSync(registro, "utf8"));
+    } catch {
+        enviadas = [];
+    }
+    const jaEnviadas = new Set(enviadas);
+    let novas = 0;
+
+    for (const nome of new Set(nomes.filter(Boolean).map(nomeSeguro))) {
+        if (jaEnviadas.has(nome)) continue;
+
+        const arquivo = path.join(config.diretorios.uploads, nome);
+        if (!fs.existsSync(arquivo)) continue;
+
+        const extensao = path.extname(nome).toLowerCase();
+        const tipo = extensao === ".png" ? "image/png" : extensao === ".webp" ? "image/webp" : "image/jpeg";
+        const { error } = await bucket().upload(nome, fs.readFileSync(arquivo), { contentType: tipo, upsert: false });
+
+        // "já existe" também conta como enviada.
+        if (error && !/exists|duplicate/i.test(error.message || "")) throw error;
+
+        jaEnviadas.add(nome);
+        novas++;
+    }
+
+    fs.mkdirSync(path.dirname(registro), { recursive: true });
+    fs.writeFileSync(registro, JSON.stringify([...jaEnviadas]));
+
+    return novas;
+}
+
+module.exports = { gerarNome, guardarEnviada, linkTemporario, caminhoLocal, enviarLocaisAoStorage };

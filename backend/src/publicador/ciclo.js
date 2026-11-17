@@ -309,6 +309,28 @@ async function sincronizarSessoes() {
     }
 }
 
+/* -------------------------------- Imagens -------------------------------- */
+
+/**
+ * Postagens antigas guardaram a imagem só neste computador: envia ao
+ * Supabase Storage para as miniaturas aparecerem no site da Vercel.
+ * Sem a migração 011 (bucket), apenas avisa.
+ */
+async function enviarImagensAntigas() {
+    const { enviarLocaisAoStorage } = require("../lib/imagens");
+    const nomes = [];
+    for (const status of Object.values(STATUS)) {
+        const lista = await publicacoesRepository.listarPorStatus(status).catch(() => []);
+        nomes.push(...lista.map((p) => p.imagem));
+    }
+    try {
+        const novas = await enviarLocaisAoStorage(nomes);
+        if (novas > 0) log.info(`${novas} imagem(ns) antiga(s) enviada(s) ao Supabase Storage`);
+    } catch (erro) {
+        log.aviso("Não foi possível enviar as imagens antigas ao Storage (execute a migração 011)", formatarErro(erro));
+    }
+}
+
 /* ------------------------------ Sinal de vida ---------------------------- */
 
 async function sinalizar(extra) {
@@ -359,6 +381,8 @@ async function iniciar({ versao = "" } = {}) {
     repetir(() => sincronizarSessoes().catch(() => {}), 5 * 60 * 1000);
 
     cicloTarefas();
+    // Em segundo plano: não atrasa a primeira rodada.
+    enviarImagensAntigas();
 
     log.info("Publicador ligado", { atrasadas: atrasadas.length, interrompidas });
     if (atrasadas.length > 0) eventos.emit("atrasadas", atrasadas);
