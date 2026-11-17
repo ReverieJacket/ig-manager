@@ -13,7 +13,7 @@ const { gerarHash, gerarSenhaTemporaria } = require("../lib/senhas");
 const clientesRepository = require("../repositories/clientes.repository");
 const contasRepository = require("../repositories/contas.repository");
 const usuariosRepository = require("../repositories/usuarios.repository");
-const { desconectar } = require("./instagram-auth.service");
+const { desconectar } = require("./automacao.service");
 const { perfilParaTela, statusDe, STATUS_PERFIL } = require("./perfis.service");
 const { PERFIS, versaoDe } = require("./auth.service");
 

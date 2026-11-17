@@ -5,14 +5,10 @@
  * automação do Instagram. É chamado tanto pelo envio imediato quanto
  * pelo agendador.
  */
-const fs = require("fs");
-const path = require("path");
-
-const { config } = require("../config/env");
 const { criarLogger } = require("../lib/logger");
 const { formatarErro } = require("../lib/erros");
 const { filaAutomacao } = require("../lib/fila");
-const { publicarNoInstagram } = require("../automacao/instagram/publicar");
+const { caminhoLocal } = require("../lib/imagens");
 const publicacoesRepository = require("../repositories/publicacoes.repository");
 const contasService = require("./contas.service");
 const contasRepository = require("../repositories/contas.repository");
@@ -95,18 +91,9 @@ async function executarPublicacao(publicacao) {
             erro: null
         });
 
-        // `path.basename` impede que um valor adulterado no banco aponte
-        // para fora da pasta de uploads.
-        const caminhoImagem = path.resolve(
-            config.diretorios.uploads,
-            path.basename(publicacao.imagem)
-        );
-
-        if (!fs.existsSync(caminhoImagem)) {
-            throw new Error(
-                `Imagem não encontrada no servidor: ${caminhoImagem}`
-            );
-        }
+        // Do disco; se a imagem foi enviada pelo site na Vercel, baixa do
+        // Supabase Storage para este computador.
+        const caminhoImagem = await caminhoLocal(publicacao.imagem);
 
         const conta = await contasService.buscarContaAtiva(publicacao.conta_id);
 
@@ -121,6 +108,7 @@ async function executarPublicacao(publicacao) {
 
         // Cada conta utiliza um arquivo de sessão isolado, identificado pelo ID.
         // Um navegador por vez: espera se outra automação estiver rodando.
+        const { publicarNoInstagram } = require("../automacao/instagram/publicar");
         const resultado = await filaAutomacao.executar(() =>
             publicarNoInstagram(
                 caminhoImagem,

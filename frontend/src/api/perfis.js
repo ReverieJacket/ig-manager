@@ -54,3 +54,22 @@ export function gerarLinkCliente(clienteId, validadeHoras) {
     body: JSON.stringify({ validadeHoras }),
   });
 }
+
+/** Configuração da conexão: `{ conexaoNoServidor }`. */
+export function obterConfigPerfis() {
+  return requisicao("/perfis/config");
+}
+
+/**
+ * Envia o arquivo de sessão (conta-<id>.json) gerado pelo
+ * `npm run login:instagram` no computador do administrador.
+ *
+ * @param {number} id - Id do perfil.
+ * @param {File} arquivo
+ * @returns {Promise<{contaId: number, username: string, status: string, expiraEm: (string|null)}>}
+ */
+export function enviarSessaoPerfil(id, arquivo) {
+  const formulario = new FormData();
+  formulario.append("arquivo", arquivo);
+  return requisicao(`/perfis/${id}/sessao`, { method: "POST", body: formulario });
+}

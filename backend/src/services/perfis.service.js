@@ -5,7 +5,9 @@
  *
  * Status de um perfil:
  * - "expirada":   o Instagram pediu login de novo ao publicar (reconectar);
- * - "conectado":  há sessão salva e ela não falhou;
+ * - "conectado":  há sessão salva (no Publicador: `sessao_salva_em`; no
+ *                 modo completo também vale o arquivo neste computador) e
+ *                 ela não falhou;
  * - "aguardando": ainda não foi conectado.
  */
 const { ErroHttp, formatarErro } = require("../lib/erros");
@@ -14,7 +16,7 @@ const clientesRepository = require("../repositories/clientes.repository");
 const contasRepository = require("../repositories/contas.repository");
 const publicacoesRepository = require("../repositories/publicacoes.repository");
 const { validarNovaConta } = require("./contas.service");
-const { contaConectada, desconectar } = require("./instagram-auth.service");
+const { contaConectada, desconectar } = require("./automacao.service");
 
 const log = criarLogger("Perfis");
 
@@ -30,7 +32,8 @@ const STATUS_PERFIL = Object.freeze({
  */
 function statusDe(conta) {
     if (conta.sessao_expirada_em) return STATUS_PERFIL.EXPIRADA;
-    return contaConectada(conta.id) ? STATUS_PERFIL.CONECTADO : STATUS_PERFIL.AGUARDANDO;
+    const salva = Boolean(conta.sessao_salva_em) || contaConectada(conta.id);
+    return salva ? STATUS_PERFIL.CONECTADO : STATUS_PERFIL.AGUARDANDO;
 }
 
 /** Formato do perfil para as telas. */

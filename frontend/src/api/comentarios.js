@@ -32,8 +32,32 @@ export function listarComentarios(
  * @returns {Promise<{novos: number, reaparecidos: number, removidos: number,
  *   total: number, completa: boolean}>}
  */
-export function coletarComentarios(publicacaoId) {
-  return requisicao(`/publicacoes/${publicacaoId}/comentarios/coletar`, {
+export async function coletarComentarios(publicacaoId) {
+  const resposta = await requisicao(`/publicacoes/${publicacaoId}/comentarios/coletar`, {
     method: "POST",
   });
+
+  // Site na Vercel: o Publicador coleta no computador dele; acompanhamos o pedido.
+  if (resposta?.emAndamento && resposta.tarefaId) {
+    return esperarTarefa(resposta.tarefaId);
+  }
+
+  return resposta;
+}
+
+/** Consulta um pedido ao Publicador a cada 3 s, por até 6 minutos. */
+async function esperarTarefa(tarefaId) {
+  const limite = Date.now() + 6 * 60 * 1000;
+
+  while (Date.now() < limite) {
+    await new Promise((resolver) => setTimeout(resolver, 3000));
+    const tarefa = await requisicao(`/tarefas/${tarefaId}`);
+
+    if (tarefa.status === "concluida") return tarefa.resultado || {};
+    if (tarefa.status === "erro") {
+      throw new Error(tarefa.mensagem || "O Publicador não conseguiu coletar os comentários.");
+    }
+  }
+
+  throw new Error("A coleta está demorando; confira de novo em alguns minutos.");
 }

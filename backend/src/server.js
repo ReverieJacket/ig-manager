@@ -3,11 +3,11 @@
  */
 const fs = require("fs");
 
-const { config } = require("./config/env");
+const { config, MODOS } = require("./config/env");
 const { criarLogger } = require("./lib/logger");
 const { criarApp } = require("./app");
 const { formatarErro } = require("./lib/erros");
-const agendador = require("./services/agendador.service");
+const ciclo = require("./publicador/ciclo");
 
 const log = criarLogger("Servidor");
 
@@ -26,25 +26,32 @@ process.on("uncaughtException", (erro) => {
 });
 
 async function iniciar() {
-    // Antes do `listen`: assim nenhuma publicação nova, criada por uma
-    // requisição, é confundida com uma que ficou presa em `publicando`.
-    try {
-        await agendador.restaurarPendentes();
-    } catch (erro) {
-        // Sem banco o servidor ainda sobe; os agendamentos antigos ficam
-        // pendentes até o próximo reinício.
-        log.erro(
-            "Não foi possível restaurar os agendamentos do banco",
-            formatarErro(erro)
-        );
+    // Modo "completo": o Publicador roda aqui mesmo. Antes do `listen`,
+    // para organizar o que ficou para trás (interrompidas, atrasadas) antes
+    // de chegar qualquer pedido novo.
+    if (config.modo === MODOS.COMPLETO) {
+        try {
+            await ciclo.iniciar({ versao: "backend" });
+        } catch (erro) {
+            // Sem banco o servidor ainda sobe; o Publicador tenta de novo a cada rodada.
+            log.erro("Não foi possível iniciar o Publicador", formatarErro(erro));
+        }
     }
 
     criarApp().listen(config.porta, () => {
         log.info(`Servidor rodando em http://localhost:${config.porta}`, {
             ambiente: config.emProducao ? "producao" : "desenvolvimento",
+            modo: config.modo,
             nivelLog: config.log.nivel,
             arquivoLog: config.log.emArquivo ? config.log.arquivo : "desativado"
         });
+    });
+}
+
+// Ctrl+C / reinício do `node --watch`: o site passa a mostrar "desligado".
+for (const sinal of ["SIGINT", "SIGTERM"]) {
+    process.on(sinal, () => {
+        ciclo.parar().finally(() => process.exit(0));
     });
 }
 

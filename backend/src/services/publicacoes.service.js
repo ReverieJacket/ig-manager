@@ -6,13 +6,16 @@
  */
 const path = require("path");
 
+const { config, MODOS } = require("../config/env");
+
 const { ErroHttp } = require("../lib/erros");
 const { criarLogger } = require("../lib/logger");
 const publicacoesRepository = require("../repositories/publicacoes.repository");
 const contasRepository = require("../repositories/contas.repository");
 const contasService = require("./contas.service");
 const agendador = require("./agendador.service");
-const { executarPublicacao } = require("./publicador.service");
+const publicadorEstado = require("./publicador-estado.service");
+const { guardarEnviada } = require("../lib/imagens");
 const { exigirProntoParaPublicar } = require("./perfis.service");
 const { comAutorDaResposta } = require("./aprovacoes.service");
 
@@ -58,7 +61,7 @@ async function listarPublicacoes() {
 }
 
 /** Status que o cliente enxerga (erros técnicos ficam só para o admin). */
-const STATUS_VISIVEIS_AO_CLIENTE = [STATUS.AGENDADA, STATUS.PUBLICANDO, STATUS.PUBLICADA];
+const STATUS_VISIVEIS_AO_CLIENTE = [STATUS.AGENDADA, STATUS.PUBLICANDO, STATUS.PUBLICADA, STATUS.ATRASADA];
 
 /**
  * Publicações das contas de um cliente (área do cliente): programadas,
@@ -95,13 +98,13 @@ async function buscarPublicacao(id) {
 }
 
 /**
- * Cria uma publicação. Se a data for futura, apenas agenda; caso
- * contrário, publica imediatamente e aguarda o resultado.
+ * Cria uma publicação. Data futura: agenda (com aprovação do cliente).
+ * Agora: entra na fila do Publicador com o horário atual, sem aprovação,
+ * e sai em instantes; o resultado aparece em Postagens.
  *
  * @param {{arquivo: Express.Multer.File, texto: string,
  *          contaId: number, dataHora: Date}} entrada - Dados já validados.
- * @returns {Promise<{agendada: boolean, publicacao: object,
- *                    resultado?: object}>}
+ * @returns {Promise<{agendada: boolean, publicacao: object}>}
  * @throws {ErroHttp} 400 se a conta não existir ou estiver inativa.
  */
 async function criarPublicacao({ arquivo, texto, contaId, dataHora }) {
@@ -118,7 +121,12 @@ async function criarPublicacao({ arquivo, texto, contaId, dataHora }) {
 
     // Publicar agora num perfil desconectado/expirado só geraria erro.
     // Agendar continua permitido: dá tempo de conectar antes do horário.
-    if (!agendada) exigirProntoParaPublicar(conta);
+    if (!agendada) {
+        exigirProntoParaPublicar(conta);
+        if (config.modo === MODOS.API) await publicadorEstado.exigirOnline("publicar agora");
+    }
+
+    const imagem = await guardarEnviada(arquivo);
 
     log.info("Registrando nova publicação", {
         contaId,
@@ -131,10 +139,10 @@ async function criarPublicacao({ arquivo, texto, contaId, dataHora }) {
     try {
         publicacao = await publicacoesRepository.criar({
             conta_id: contaId,
-            imagem: arquivo.filename,
+            imagem,
             texto,
-            data_hora: dataHora.toISOString(),
-            status: agendada ? STATUS.AGENDADA : STATUS.PUBLICANDO,
+            data_hora: (agendada ? dataHora : new Date()).toISOString(),
+            status: STATUS.AGENDADA,
             // Agendada passa pela aprovação do cliente; publicar agora, não.
             ...(agendada ? { aprovacao: APROVACAO.PENDENTE } : {}),
             erro: null
@@ -148,18 +156,13 @@ async function criarPublicacao({ arquivo, texto, contaId, dataHora }) {
 
     log.info(`Publicação registrada: ${publicacao.id}`);
 
-    if (agendada) {
-        agendador.agendar(publicacao);
-        return { agendada: true, publicacao };
-    }
+    agendador.agendar(publicacao);
 
-    const resultado = await executarPublicacao(publicacao);
-
-    return { agendada: false, publicacao, resultado };
+    return { agendada, publicacao };
 }
 
 /** Status que o administrador pode cancelar. */
-const STATUS_CANCELAVEIS = [STATUS.AGENDADA, STATUS.RECUSADA];
+const STATUS_CANCELAVEIS = [STATUS.AGENDADA, STATUS.RECUSADA, STATUS.ATRASADA];
 
 /**
  * Cancela uma publicação agendada (ou recusada). Não apaga: o status vira

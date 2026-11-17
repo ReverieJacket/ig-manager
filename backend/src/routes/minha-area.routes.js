@@ -23,25 +23,34 @@
  */
 const { Router } = require("express");
 
-const { config } = require("../config/env");
+const { config, MODOS } = require("../config/env");
 const { ErroHttp } = require("../lib/erros");
 const { validarId } = require("../validators/publicacoes.validator");
 const contasRepository = require("../repositories/contas.repository");
 const contasService = require("../services/contas.service");
 const { contaComStatus } = require("../services/clientes.service");
-const instagramAuth = require("../services/instagram-auth.service");
+const automacao = require("../services/automacao.service");
 const publicacoesService = require("../services/publicacoes.service");
 const aprovacoesService = require("../services/aprovacoes.service");
 const retomadaService = require("../services/retomada.service");
 
 const router = Router();
 
+/**
+ * O cliente só conecta o próprio perfil quando o Chromium abre na tela
+ * dele: tudo no mesmo computador (modo "completo"). Na Vercel o Chromium
+ * abre no computador do Publicador; até o navegador remoto, quem conecta
+ * é a equipe.
+ */
+const clientePodeConectar = () =>
+    config.conexaoPeloCliente && config.conexaoNoServidor && config.modo !== MODOS.API;
+
 router.get("/contas", async (req, res) => {
     const contas = await contasRepository.listarPorCliente(req.usuario.cliente.id);
     res.json(
         contas
             .filter((c) => c.ativo)
-            .map((c) => ({ ...contaComStatus(c), podeConectar: config.conexaoPeloCliente }))
+            .map((c) => ({ ...contaComStatus(c), podeConectar: clientePodeConectar() }))
     );
 });
 
@@ -50,7 +59,7 @@ router.get("/contas", async (req, res) => {
  * (igual a inexistente, para não revelar ids de terceiros).
  */
 async function perfilDoCliente(req) {
-    if (!config.conexaoPeloCliente) {
+    if (!clientePodeConectar()) {
         throw new ErroHttp(403, "A conexão do perfil é feita pela equipe. Entre em contato com ela.");
     }
 
@@ -66,12 +75,12 @@ async function perfilDoCliente(req) {
 
 router.post("/contas/:id/conectar", async (req, res) => {
     const conta = await perfilDoCliente(req);
-    res.json(await instagramAuth.iniciar(conta.id));
+    res.json(await automacao.conectar(conta.id));
 });
 
 router.get("/contas/:id/conexao", async (req, res) => {
     const conta = await perfilDoCliente(req);
-    res.json(await instagramAuth.consultar(conta.id));
+    res.json(await automacao.consultarConexao(conta.id));
 });
 
 router.post("/contas", async (req, res) => {
@@ -79,7 +88,7 @@ router.post("/contas", async (req, res) => {
         nome: req.body?.nome,
         username: req.body?.username
     });
-    res.status(201).json({ sucesso: true, conta: { ...conta, conectada: false, status: "aguardando", podeConectar: config.conexaoPeloCliente } });
+    res.status(201).json({ sucesso: true, conta: { ...conta, conectada: false, status: "aguardando", podeConectar: clientePodeConectar() } });
 });
 
 router.get("/publicacoes", async (req, res) => {

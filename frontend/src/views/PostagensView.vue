@@ -29,6 +29,21 @@
       <router-link to="/clientes" class="botao botao--secundario botao--pequeno">Ver em Clientes</router-link>
     </div>
 
+    <div v-if="contagens[STATUS.ATRASADA] > 0" class="alerta alerta--aviso faixa-atencao" role="alert">
+      <div>
+        <strong>
+          {{ contagens[STATUS.ATRASADA] === 1 ? "1 publicação atrasada" : `${contagens[STATUS.ATRASADA]} publicações atrasadas` }}
+        </strong>
+        <span>
+          O horário passou com o Publicador desligado e elas não foram publicadas. Em cada uma, use ⋯ para
+          "Publicar agora" ou "Reagendar".
+        </span>
+      </div>
+      <button class="botao botao--secundario botao--pequeno" type="button" @click="filtro = STATUS.ATRASADA">
+        Ver atrasadas
+      </button>
+    </div>
+
     <ResumoPublicacoes :contagens="contagens" />
 
     <section class="cartao">
@@ -161,7 +176,7 @@ import ModalRetomar from "../components/publicacoes/ModalRetomar.vue";
 import { cancelarPublicacao, responderPeloCliente, retomarPeloCliente } from "../api/publicacoes";
 import ResumoPublicacoes from "../components/publicacoes/ResumoPublicacoes.vue";
 import TabelaPublicacoes from "../components/publicacoes/TabelaPublicacoes.vue";
-import { ABAS_FILTRO, APROVACAO } from "../constants/publicacoes";
+import { ABAS_FILTRO, APROVACAO, STATUS } from "../constants/publicacoes";
 import { formatarData } from "../utils/formatadores";
 import { useAlertasPerfis } from "../composables/useAlertasPerfis";
 import { usePublicacoes } from "../composables/usePublicacoes";
@@ -217,11 +232,12 @@ const retomando = ref(null);
 async function aoRetomar({ acao, dataHora }) {
   const p = retomando.value.publicacao;
   retomando.value = null;
+  const atrasada = p.status === STATUS.ATRASADA;
   avisar(
     "sucesso",
     acao === "publicar"
       ? `Publicando o post de @${p.username} (leva cerca de 1 minuto).`
-      : `Post de @${p.username} agendado para ${formatarData(dataHora)}, já deferido.`
+      : `Post de @${p.username} agendado para ${formatarData(dataHora)}${atrasada ? "" : ", já deferido"}.`
   );
   await carregar({ silencioso: true });
   // Atualiza de novo quando a publicação deve ter terminado.

@@ -20,6 +20,8 @@ const COLUNAS = "*";
  * `agendada` <-> `recusada` (indeferida pelo cliente; volta se ele deferir
  * antes do horário).
  * `agendada` | `recusada` -> `cancelada` (cancelada pelo administrador).
+ * `agendada` -> `atrasada` (o horário passou com o Publicador desligado;
+ * volta a `agendada` quando o administrador publica agora ou reagenda).
  */
 const STATUS = Object.freeze({
     AGENDADA: "agendada",
@@ -27,7 +29,8 @@ const STATUS = Object.freeze({
     PUBLICADA: "publicada",
     ERRO: "erro",
     RECUSADA: "recusada",
-    CANCELADA: "cancelada"
+    CANCELADA: "cancelada",
+    ATRASADA: "atrasada"
 });
 
 /** Resposta do cliente a uma publicação agendada (coluna `aprovacao`). */
@@ -131,6 +134,44 @@ async function listarPorStatus(status) {
 }
 
 /**
+ * Agendadas cujo horário já chegou (até `ate`), da mais antiga para a
+ * mais nova: o que o Publicador deve executar agora.
+ *
+ * @param {string} ate - ISO 8601.
+ */
+async function listarVencidas(ate) {
+    const { data, error } = await supabase
+        .from(TABELA)
+        .select(COLUNAS)
+        .eq("status", STATUS.AGENDADA)
+        .lte("data_hora", ate)
+        .order("data_hora", { ascending: true });
+
+    if (error) throw error;
+
+    return data || [];
+}
+
+/**
+ * Agendadas que ainda vão sair (horário depois de `desde`), da mais
+ * próxima para a mais distante (alerta antes de desligar).
+ *
+ * @param {string} desde - ISO 8601.
+ */
+async function listarProximas(desde) {
+    const { data, error } = await supabase
+        .from(TABELA)
+        .select(COLUNAS)
+        .eq("status", STATUS.AGENDADA)
+        .gt("data_hora", desde)
+        .order("data_hora", { ascending: true });
+
+    if (error) throw error;
+
+    return data || [];
+}
+
+/**
  * Insere uma nova publicação.
  *
  * @param {{conta_id: number, imagem: string, texto: string,
@@ -224,6 +265,8 @@ module.exports = {
     listarPorContas,
     existeParaConta,
     listarPorStatus,
+    listarVencidas,
+    listarProximas,
     buscarPorId,
     criar,
     atualizar

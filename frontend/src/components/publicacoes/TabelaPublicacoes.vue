@@ -41,7 +41,7 @@
               {{ formatarStatus(post.status) }}
             </span>
             <small
-              v-if="normalizarStatus(post.status) === STATUS.ERRO && post.erro"
+              v-if="[STATUS.ERRO, STATUS.ATRASADA].includes(normalizarStatus(post.status)) && post.erro"
               class="motivo-erro"
               :title="post.erro"
             >{{ post.erro }}</small>
@@ -147,13 +147,20 @@ function podeRetomar(post) {
   );
 }
 
-/** Agendada ou recusada (ainda não saiu): o administrador pode cancelar. */
+/** Agendada, recusada ou atrasada (ainda não saiu): o administrador pode cancelar. */
 function podeCancelar(post) {
-  return [STATUS.AGENDADA, STATUS.RECUSADA].includes(normalizarStatus(post.status));
+  return [STATUS.AGENDADA, STATUS.RECUSADA, STATUS.ATRASADA].includes(normalizarStatus(post.status));
 }
 
 function acoesDe(post) {
   const itens = podeResponder(post) ? acoesAprovacao(post) : [];
+  if (normalizarStatus(post.status) === STATUS.ATRASADA) {
+    itens.push(
+      { titulo: "Atrasada · Publicador estava desligado" },
+      { rotulo: "▶ Publicar agora", acao: () => emit("retomar", { publicacao: post, acao: "publicar" }) },
+      { rotulo: "🗓 Reagendar", acao: () => emit("retomar", { publicacao: post, acao: "agendar" }) }
+    );
+  }
   if (podeRetomar(post)) {
     itens.push(
       { titulo: "Sem resposta · pelo cliente" },
@@ -329,6 +336,11 @@ tr:last-child td {
 .status.pendente {
   background: #fff6e0;
   color: #8a5a00;
+}
+
+.status.atrasada {
+  background: #fff1db;
+  color: #9a5800;
 }
 
 .status.agendada {

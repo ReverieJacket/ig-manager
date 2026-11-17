@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<title>IG Manager Publicador</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Segoe UI", Arial, sans-serif; color: #222; background: #f6f7fb; font-size: 14px; }
+  header { padding: 18px 22px 12px; background: #fff; border-bottom: 1px solid #e3e6ee; }
+  h1 { margin: 0 0 6px; font-size: 18px; }
+  header p { margin: 0; color: #555; line-height: 1.45; }
+  header.alerta { border-top: 4px solid #d97706; }
+  header.info { border-top: 4px solid #1d4ed8; }
+  main { padding: 14px 22px; max-height: calc(100vh - 190px); overflow-y: auto; }
+  .item { background: #fff; border: 1px solid #e3e6ee; border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
+  .linha { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+  .quem { font-weight: 600; }
+  .quando { color: #555; white-space: nowrap; }
+  .texto { color: #666; margin: 6px 0 0; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .acoes { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; align-items: center; }
+  .resultado { font-size: 13px; margin-top: 8px; }
+  .ok { color: #15803d; } .erro { color: #b91c1c; }
+  button { font: inherit; border-radius: 8px; padding: 7px 14px; border: 1px solid #c8cdd9; background: #fff; cursor: pointer; }
+  button.primario { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
+  button.perigo { background: #b45309; border-color: #b45309; color: #fff; }
+  button:disabled { opacity: .55; cursor: default; }
+  input[type=datetime-local] { font: inherit; padding: 6px 8px; border: 1px solid #c8cdd9; border-radius: 8px; }
+  footer { position: fixed; bottom: 0; left: 0; right: 0; padding: 12px 22px; background: #fff; border-top: 1px solid #e3e6ee; display: flex; justify-content: flex-end; gap: 10px; }
+  .vazio { color: #666; text-align: center; padding: 30px 0; }
+</style>
+</head>
+<body>
+<header id="cabecalho"><h1 id="titulo"></h1><p id="descricao"></p></header>
+<main id="lista"></main>
+<footer id="rodape"></footer>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const fmt = (iso) => new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+  const botao = (rotulo, classe, acao) => {
+    const b = document.createElement("button");
+    b.textContent = rotulo; if (classe) b.className = classe; b.onclick = acao; return b;
+  };
+  function minimoLocal() {
+    const d = new Date(Date.now() + 60000); d.setSeconds(0, 0);
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  }
+
+  /** Atrasadas ainda sem decisão; ao zerar, a janela fecha sozinha. */
+  let pendentes = 0;
+  function resolvida() {
+    pendentes--;
+    if (pendentes > 0) return;
+    $("titulo").textContent = "Tudo resolvido ✓";
+    $("descricao").textContent = "As publicações atrasadas foram para a fila ou reagendadas. Esta janela fecha sozinha.";
+    $("rodape").innerHTML = "";
+    setTimeout(() => window.publicador.fechar(), 2500);
+  }
+
+  function cartao(p, comAcoes) {
+    const div = document.createElement("div");
+    div.className = "item";
+    div.innerHTML = `<div class="linha"><span class="quem"></span><span class="quando"></span></div><p class="texto"></p>`;
+    div.querySelector(".quem").textContent = `@${p.username || "?"}${p.cliente ? " · " + p.cliente : ""}`;
+    div.querySelector(".quando").textContent = fmt(p.data_hora);
+    div.querySelector(".texto").textContent = p.texto || "";
+    if (!comAcoes) return div;
+
+    const acoes = document.createElement("div"); acoes.className = "acoes";
+    const resultado = document.createElement("div"); resultado.className = "resultado";
+    const campo = document.createElement("input"); campo.type = "datetime-local"; campo.min = minimoLocal(); campo.value = minimoLocal();
+    const mostrar = (r, okTexto) => {
+      resultado.className = "resultado " + (r.sucesso ? "ok" : "erro");
+      resultado.textContent = r.sucesso ? okTexto : r.mensagem;
+      if (r.sucesso) {
+        acoes.querySelectorAll("button, input").forEach((e) => (e.disabled = true));
+        resolvida();
+      }
+    };
+    acoes.append(
+      botao("▶ Publicar agora", "primario", async () => mostrar(await window.publicador.publicarAgora(p.id), "Na fila: sai em instantes.")),
+      campo,
+      botao("🗓 Reagendar", "", async () => {
+        if (!campo.value) return;
+        const iso = new Date(campo.value).toISOString();
+        mostrar(await window.publicador.reagendar(p.id, iso), `Reagendada para ${fmt(iso)}.`);
+      })
+    );
+    div.append(acoes, resultado);
+    return div;
+  }
+
+  window.publicador.aoReceber((dados) => {
+    const lista = $("lista"), rodape = $("rodape");
+    lista.innerHTML = ""; rodape.innerHTML = "";
+
+    if (dados.modo === "atrasadas") {
+      $("cabecalho").className = "alerta";
+      $("titulo").textContent = `${dados.itens.length} publicação(ões) atrasada(s)`;
+      $("descricao").textContent =
+        "O horário destas publicações passou enquanto o Publicador estava desligado, por isso elas não foram publicadas. " +
+        "Escolha publicar agora ou fazer um novo agendamento.";
+      pendentes = dados.itens.length;
+      dados.itens.forEach((p) => lista.append(cartao(p, true)));
+      if (!dados.itens.length) lista.innerHTML = '<p class="vazio">Nenhuma publicação atrasada.</p>';
+      rodape.append(
+        botao("Decidir depois", "", () => window.publicador.fechar()),
+        botao("▶ Publicar todas agora", "primario", async (e) => {
+          e.target.disabled = true;
+          const r = await window.publicador.publicarTodas();
+          $("descricao").textContent = r.mensagem;
+          if (r.sucesso) {
+            $("titulo").textContent = "Tudo resolvido ✓";
+            rodape.innerHTML = "";
+            setTimeout(() => window.publicador.fechar(), 2500);
+          }
+        })
+      );
+      return;
+    }
+
+    if (dados.modo === "saida") {
+      $("cabecalho").className = "alerta";
+      $("titulo").textContent = dados.desligando ? "O computador vai desligar" : "Fechar o Publicador?";
+      const n = dados.itens.length;
+      $("descricao").textContent =
+        `Existem ${n} publicação(ões) agendada(s) para os horários abaixo. ` +
+        "Se o computador ou o Publicador não estiver ligado nesses horários, elas NÃO serão publicadas." +
+        (dados.ocupado ? " Uma publicação está em andamento agora." : "");
+      dados.itens.forEach((p) => lista.append(cartao(p, false)));
+      rodape.append(
+        botao(dados.desligando ? "Cancelar o desligamento" : "Manter ligado", "primario", () => window.publicador.responderSaida("ficar")),
+        botao(dados.desligando ? "Desligar mesmo assim" : "Fechar mesmo assim", "perigo", () => window.publicador.responderSaida("sair"))
+      );
+      return;
+    }
+
+    if (dados.modo === "proximas") {
+      $("cabecalho").className = "info";
+      $("titulo").textContent = `Próximas publicações (${dados.itens.length})`;
+      $("descricao").textContent = "Deixe este computador ligado, com o Publicador aberto, nesses horários.";
+      dados.itens.forEach((p) => lista.append(cartao(p, false)));
+      if (!dados.itens.length) lista.innerHTML = '<p class="vazio">Nenhuma publicação agendada.</p>';
+      rodape.append(botao("Fechar", "", () => window.publicador.fechar()));
+    }
+  });
+</script>
+</body>
+</html>

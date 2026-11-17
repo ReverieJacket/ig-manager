@@ -13,7 +13,8 @@
     "build": "npm run build -w frontend",
     "login:instagram": "npm run login:instagram -w backend --",
     "verificar:conexao": "npm run verificar:conexao -w backend",
-    "criar:admin": "npm run criar:admin -w backend --"
+    "criar:admin": "npm run criar:admin -w backend --",
+    "publicador": "npm run publicador -w backend"
   },
   "engines": {
     "node": ">=20"
