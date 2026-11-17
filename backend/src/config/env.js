@@ -25,8 +25,37 @@ const DIRETORIO_STORAGE = path.join(RAIZ_BACKEND, "storage");
 
 const emProducao = process.env.NODE_ENV === "production";
 
+/**
+ * Como este processo roda (IG_MODO):
+ * - "completo"  (padrão): API + Publicador no mesmo processo, como no
+ *   computador de desenvolvimento;
+ * - "api":        só a API (site na Vercel). Não abre navegador: publicar,
+ *   conectar e coletar comentários viram pedidos para o Publicador;
+ * - "publicador": só o Publicador (app no computador do administrador).
+ */
+const MODOS = Object.freeze({ COMPLETO: "completo", API: "api", PUBLICADOR: "publicador" });
+const modo = Object.values(MODOS).includes(process.env.IG_MODO) ? process.env.IG_MODO : MODOS.COMPLETO;
+
 const config = {
     emProducao,
+
+    modo,
+
+    /**
+     * Imagens das postagens no Supabase Storage (bucket `publicacoes`) em
+     * vez da pasta storage/uploads. Obrigatório na Vercel (sem disco).
+     */
+    imagensNoSupabase: modo === MODOS.API || process.env.IMAGENS_NO_SUPABASE === "true",
+    bucketImagens: "publicacoes",
+
+    /** Ritmo do Publicador e quando ele é considerado desligado. */
+    publicador: {
+        intervaloPublicacoesMs: 15 * 1000,
+        intervaloTarefasMs: 4 * 1000,
+        intervaloSinalMs: 30 * 1000,
+        /** Sem sinal há mais que isso: "Publicador desligado". */
+        limiteSemSinalMs: 90 * 1000
+    },
 
     porta: Number(process.env.PORT || 3000),
 
@@ -95,7 +124,9 @@ const config = {
     },
 
     upload: {
-        tamanhoMaximoBytes: 15 * 1024 * 1024,
+        // A Vercel recusa requisições acima de 4,5 MB (o site reduz as
+        // imagens grandes antes de enviar).
+        tamanhoMaximoBytes: (modo === MODOS.API ? 4 : 15) * 1024 * 1024,
         tiposPermitidos: ["image/jpeg", "image/png", "image/webp"]
     }
 };
@@ -118,4 +149,4 @@ function exigirVariaveis(nomes) {
     }
 }
 
-module.exports = { config, exigirVariaveis };
+module.exports = { config, exigirVariaveis, MODOS };

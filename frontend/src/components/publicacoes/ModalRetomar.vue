@@ -1,5 +1,6 @@
 <!--
-  Retomar um post que ficou SEM RESPOSTA até o horário (prazo esgotado):
+  Retomar um post que ficou SEM RESPOSTA até o horário (prazo esgotado) ou
+  ATRASADO (o horário passou com o Publicador desligado):
   - acao "publicar": confirmação de "Publicar agora";
   - acao "agendar": escolhe data e horário (qualquer horário que ainda não
     passou; ex.: às 15:19, vale 15:20 em diante).
@@ -42,8 +43,11 @@
         Esse horário já passou. Escolha a partir de {{ minimoTexto() }}.
       </small>
       <small v-else class="dica">Qualquer horário a partir de agora.</small>
-      <p class="alerta alerta--info">
+      <p v-if="!atrasada" class="alerta alerta--info">
         Se mudar de ideia, dá para indeferir em "Aprovações → Respondidas" até o novo horário.
+      </p>
+      <p v-else class="alerta alerta--info">
+        Deixe o computador do Publicador ligado nesse horário para o post sair.
       </p>
     </template>
 
@@ -134,11 +138,19 @@ function minimoTexto() {
 }
 
 const subtitulo = computed(() => {
+  if (atrasada.value) {
+    return props.acao === "publicar"
+      ? "O horário deste post passou com o Publicador desligado. Ele sai agora, com a mesma imagem e legenda."
+      : "O horário deste post passou com o Publicador desligado. Escolha um novo horário; a aprovação continua valendo.";
+  }
   const quem = props.pelaEquipe ? "em nome do cliente" : "por você";
   return props.acao === "publicar"
     ? `Este post ficou sem resposta até o horário. Publicando agora, ele fica registrado como deferido ${quem}.`
     : `Escolha quando o post deve sair. Ao agendar, ele já fica deferido ${quem} e é publicado no horário.`;
 });
+
+/** Atrasada (Publicador desligado) em vez de "sem resposta". */
+const atrasada = computed(() => props.publicacao.status === "atrasada");
 
 const textoBotao = computed(() => {
   if (enviando.value) return props.acao === "publicar" ? "Enviando..." : "Agendando...";

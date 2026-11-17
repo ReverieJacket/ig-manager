@@ -6,7 +6,8 @@
 /**
  * Status possíveis de uma publicação (mesmos valores gravados pelo backend).
  * `recusada` = indeferida pelo cliente (não será publicada); `cancelada` =
- * cancelada pelo administrador (aparece em "Todas"). `rascunho`
+ * cancelada pelo administrador (aparece em "Todas"); `atrasada` = o horário
+ * passou com o Publicador desligado (publicar agora ou reagendar). `rascunho`
  * ainda não é gerado pelo backend.
  */
 export const STATUS = Object.freeze({
@@ -17,6 +18,7 @@ export const STATUS = Object.freeze({
   ERRO: "erro",
   RECUSADA: "recusada",
   CANCELADA: "cancelada",
+  ATRASADA: "atrasada",
 });
 
 /** Texto exibido para cada status. */
@@ -28,6 +30,7 @@ export const ROTULOS_STATUS = Object.freeze({
   [STATUS.ERRO]: "Com erro",
   [STATUS.RECUSADA]: "Recusada",
   [STATUS.CANCELADA]: "Cancelada",
+  [STATUS.ATRASADA]: "Atrasada",
 });
 
 /** Valor especial da aba que não filtra por status. */
@@ -59,15 +62,19 @@ export const ABAS_FILTRO = Object.freeze([
   { valor: FILTRO_TODAS, rotulo: "Todas" },
   { valor: STATUS.PUBLICADA, rotulo: "Publicadas" },
   { valor: STATUS.AGENDADA, rotulo: "Agendadas" },
+  { valor: STATUS.ATRASADA, rotulo: "Atrasadas" },
   { valor: FILTRO_AGUARDANDO, rotulo: "Aguardando cliente" },
   { valor: STATUS.ERRO, rotulo: "Com erro" },
   { valor: STATUS.RECUSADA, rotulo: "Recusadas" },
 ]);
 
-/** Regras da imagem enviada (o backend aceita até 15 MB; aqui somos mais restritos). */
+/**
+ * Regras da imagem escolhida. Acima de ~3,5 MB ela é reduzida antes do
+ * envio (`utils/imagem.js`), por isso aceitamos arquivos maiores aqui.
+ */
 export const IMAGEM = Object.freeze({
   tiposPermitidos: ["image/jpeg", "image/png", "image/webp"],
-  tamanhoMaximoMb: 10,
+  tamanhoMaximoMb: 25,
 });
 
 /** Limite de caracteres da legenda do Instagram. */

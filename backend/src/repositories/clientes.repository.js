@@ -60,7 +60,7 @@ async function listarComResumo() {
     const { data, error } = await supabase
         .from(TABELA)
         .select(
-            `${COLUNAS}, usuarios(id, ativo, senha_temporaria), contas_instagram(id, ativo, sessao_expirada_em)`
+            `${COLUNAS}, usuarios(id, ativo, senha_temporaria), contas_instagram(*)`
         )
         .order("nome", { ascending: true });
     if (error) throw error;

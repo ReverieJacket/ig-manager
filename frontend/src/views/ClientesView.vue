@@ -139,6 +139,7 @@
                     class="botao botao--primario botao--pequeno"
                     type="button"
                     :disabled="emAndamento(perfil.id) || !detalhe.cliente.ativo"
+                    :title="viaPublicador ? 'O Chromium abre no computador do Publicador para o login no Instagram' : ''"
                     @click="conectar(perfil)"
                   >
                     {{ emAndamento(perfil.id) ? "Aguardando login..." : perfil.status === "expirada" ? "Reconectar" : "Conectar" }}
@@ -603,11 +604,14 @@ const acoesCliente = computed(() => {
 
 function acoesPerfil(perfil) {
   return [
-    {
-      rotulo: "⬆ Enviar sessão (arquivo)",
-      acao: () => { enviandoSessao.value = perfil; },
-      desabilitado: !detalhe.value?.cliente.ativo,
-    },
+    // No site da Vercel a sessão fica no Publicador: envio por arquivo não se aplica.
+    ...(envioDeSessao.value
+      ? [{
+          rotulo: "⬆ Enviar sessão (arquivo)",
+          acao: () => { enviandoSessao.value = perfil; },
+          desabilitado: !detalhe.value?.cliente.ativo,
+        }]
+      : []),
     {
       rotulo: "Desconectar",
       acao: () => confirmarDesconectar(perfil),
@@ -975,6 +979,10 @@ async function conectar(perfil) {
 
 /** No servidor sem tela, "Conectar" vira "Enviar sessão". */
 const conexaoPorArquivo = ref(false);
+/** "Enviar sessão" disponível (não existe no site da Vercel). */
+const envioDeSessao = ref(true);
+/** Site na Vercel: o "Conectar" abre o Chromium no computador do Publicador. */
+const viaPublicador = ref(false);
 const enviandoSessao = ref(null);
 
 async function aoEnviarSessao(r) {
@@ -986,7 +994,11 @@ async function aoEnviarSessao(r) {
 onMounted(() => {
   carregarLista();
   obterConfigPerfis()
-    .then((c) => { conexaoPorArquivo.value = c?.conexaoNoServidor === false; })
+    .then((c) => {
+      conexaoPorArquivo.value = c?.conexaoNoServidor === false;
+      envioDeSessao.value = c?.envioDeSessao !== false;
+      viaPublicador.value = c?.modo === "api";
+    })
     .catch(() => {});
 });
 onBeforeUnmount(() => {

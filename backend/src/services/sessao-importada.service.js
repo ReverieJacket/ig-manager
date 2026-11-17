@@ -95,6 +95,7 @@ async function importar(contaId, conteudo) {
     fs.renameSync(temporario, arquivo);
 
     await contasRepository.limparSessaoExpirada(conta.id).catch(() => {});
+    await contasRepository.definirSessaoSalva(conta.id, new Date().toISOString()).catch(() => {});
     log.info(`Sessão importada para @${conta.username}`, { contaId: conta.id });
 
     return {

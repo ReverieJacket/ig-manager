@@ -7,7 +7,6 @@
 const { ErroHttp, formatarErro } = require("../lib/erros");
 const { filaAutomacao } = require("../lib/fila");
 const { criarLogger } = require("../lib/logger");
-const { coletarComentariosDoPost } = require("../automacao/instagram/coletar");
 const comentariosRepository = require("../repositories/comentarios.repository");
 const curtidasRepository = require("../repositories/curtidas.repository");
 const publicacoesRepository = require("../repositories/publicacoes.repository");
@@ -171,6 +170,8 @@ async function coletarComentarios(publicacaoId) {
     let coleta;
 
     try {
+        // Carregado só aqui: o site (Vercel) não usa o navegador.
+        const { coletarComentariosDoPost } = require("../automacao/instagram/coletar");
         coleta = await filaAutomacao.executar(() =>
             coletarComentariosDoPost(publicacao.conta_id, publicacao.ig_codigo)
         );

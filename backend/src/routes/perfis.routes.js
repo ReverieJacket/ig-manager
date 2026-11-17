@@ -5,8 +5,9 @@
  *                           (tela Criar).
  * GET    /perfis/atencao  - perfis com sessão expirada (contador do menu e
  *                           aviso em Postagens).
- * GET    /perfis/config   - { conexaoNoServidor }: se o "Conectar" abre o
- *                           Chromium aqui ou se a conexão é por arquivo.
+ * GET    /perfis/config   - { conexaoNoServidor, modo, publicador }: se o
+ *                           "Conectar" abre o Chromium aqui, por arquivo ou
+ *                           no Publicador, e se o Publicador está ligado.
  * POST   /perfis/:id/sessao - multipart `arquivo`: envia o conta-<id>.json
  *                           gerado pelo login:instagram (servidor sem tela).
  * PATCH  /perfis/:id      - { nome } -> renomeia o perfil.
@@ -22,7 +23,8 @@ const perfisService = require("../services/perfis.service");
 const sessaoImportada = require("../services/sessao-importada.service");
 const { uploadSessao } = require("../middlewares/upload");
 const { ErroHttp } = require("../lib/erros");
-const { config } = require("../config/env");
+const { config, MODOS } = require("../config/env");
+const publicadorEstado = require("../services/publicador-estado.service");
 
 const router = Router();
 
@@ -34,12 +36,21 @@ router.get("/atencao", async (req, res) => {
     res.json(await perfisService.listarEmAtencao());
 });
 
-router.get("/config", (req, res) => {
-    res.json({ conexaoNoServidor: config.conexaoNoServidor });
+router.get("/config", async (req, res) => {
+    res.json({
+        conexaoNoServidor: config.conexaoNoServidor,
+        // Na Vercel a sessão fica no Publicador: "Enviar sessão" não se aplica.
+        envioDeSessao: config.modo !== MODOS.API,
+        modo: config.modo,
+        publicador: await publicadorEstado.consultar()
+    });
 });
 
 router.post("/:id/sessao", uploadSessao, async (req, res) => {
     const id = validarId(req.params.id, "ID de perfil inválido.");
+    if (config.modo === MODOS.API) {
+        throw new ErroHttp(409, "No site da Vercel a sessão fica no Publicador: use \"Conectar\".");
+    }
     if (!req.file) throw new ErroHttp(400, "Escolha o arquivo de sessão (conta-<id>.json).");
     res.json({ sucesso: true, ...(await sessaoImportada.importar(id, req.file.buffer)) });
 });

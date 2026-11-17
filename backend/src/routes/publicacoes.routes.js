@@ -8,8 +8,8 @@
  * GET  /publicacoes/:id/comentarios - comentários (?pagina, ?limite, ?incluirRemovidos).
  * POST /publicacoes/:id/comentarios/coletar - coleta agora no Instagram (demora).
  * PATCH /publicacoes/:id/instagram - define o código/URL do post no Instagram.
- * POST /publicacoes/:id/retomar - post sem resposta: publicar agora ou
- *                         agendar de novo, EM NOME DO CLIENTE.
+ * POST /publicacoes/:id/retomar - post sem resposta (em nome do cliente)
+ *                         ou atrasada: publicar agora ou agendar de novo.
  * POST /publicacoes/:id/cancelar - cancela uma agendada/recusada (não apaga).
  * POST /publicacoes/:id/aprovacao - responde EM NOME DO CLIENTE
  *                         ({ decisao, categoria?, motivo? }).
@@ -30,6 +30,7 @@ const publicacoesService = require("../services/publicacoes.service");
 const comentariosService = require("../services/comentarios.service");
 const aprovacoesService = require("../services/aprovacoes.service");
 const retomadaService = require("../services/retomada.service");
+const automacao = require("../services/automacao.service");
 
 const router = Router();
 
@@ -39,8 +40,7 @@ router.get("/", async (req, res) => {
 
 router.post("/", uploadImagem, async (req, res) => {
     const entrada = validarNovaPublicacao(req.body, req.file);
-    const { agendada, publicacao, resultado } =
-        await publicacoesService.criarPublicacao(entrada);
+    const { agendada, publicacao } = await publicacoesService.criarPublicacao(entrada);
 
     if (agendada) {
         return res.status(201).json({
@@ -52,21 +52,12 @@ router.post("/", uploadImagem, async (req, res) => {
         });
     }
 
-    if (resultado.sucesso) {
-        return res.status(200).json({
-            sucesso: true,
-            id: publicacao.id,
-            mensagem: "Publicação realizada com sucesso."
-        });
-    }
-
-    // 502: o servidor funcionou, mas a automação (serviço externo) falhou.
-    res.status(502).json({
-        sucesso: false,
+    // 202: aceita; o Publicador publica em instantes (resultado em Postagens).
+    res.status(202).json({
+        sucesso: true,
+        enviada: true,
         id: publicacao.id,
-        resultadoIncerto: Boolean(resultado.resultadoIncerto),
-        mensagem:
-            resultado.mensagem || "A automação não confirmou a publicação."
+        mensagem: "Enviada para publicação: sai em instantes. Acompanhe o resultado em Postagens."
     });
 });
 
@@ -87,10 +78,9 @@ router.get("/:id/comentarios", async (req, res) => {
 router.post("/:id/comentarios/coletar", async (req, res) => {
     const id = validarId(req.params.id, "ID de publicação inválido.");
 
-    res.json({
-        sucesso: true,
-        ...(await comentariosService.coletarComentarios(id))
-    });
+    const resultado = await automacao.coletarComentarios(id);
+    // Via Publicador: 202 + tarefaId; as telas acompanham em /tarefas/:id.
+    res.status(resultado.emAndamento ? 202 : 200).json({ sucesso: true, ...resultado });
 });
 
 router.patch("/:id/instagram", async (req, res) => {

@@ -1,25 +1,32 @@
 /**
- * Retomar publicações que ficaram SEM RESPOSTA até o horário ("prazo
- * esgotado": status `recusada` com `aprovacao` ainda `pendente`).
+ * Retomar publicações que não saíram no horário:
  *
+ * 1. SEM RESPOSTA até o horário ("prazo esgotado": status `recusada` com
+ *    `aprovacao` ainda `pendente`);
+ * 2. ATRASADAS (status `atrasada`): aprovadas, mas o horário passou com o
+ *    Publicador desligado. Só o administrador retoma; a aprovação não muda.
+ *
+ * Sem resposta:
  * Por até 30 dias depois do horário original, o cliente (ou a equipe, em
  * nome dele) pode:
- * - publicar agora: a publicação sai em segundo plano (status
- *   `publicando`); exige o perfil conectado;
+ * - publicar agora: entra na fila do Publicador com o horário atual e sai
+ *   em instantes; exige o perfil conectado (e, na Vercel, o Publicador
+ *   ligado);
  * - agendar: escolhe qualquer horário que ainda não passou e a
  *   publicação já fica DEFERIDA, sem pedir nova aprovação.
  *
  * Fica registrado quem retomou (`retomada_por`, `retomada_pela_equipe`,
  * `retomada_em`) e o horário original (`horario_original`).
  */
-const { ErroHttp, formatarErro } = require("../lib/erros");
+const { ErroHttp } = require("../lib/erros");
 const { criarLogger } = require("../lib/logger");
 const publicacoesRepository = require("../repositories/publicacoes.repository");
 const contasRepository = require("../repositories/contas.repository");
 const contasService = require("./contas.service");
 const agendador = require("./agendador.service");
-const { executarPublicacao } = require("./publicador.service");
 const { exigirProntoParaPublicar } = require("./perfis.service");
+const publicadorEstado = require("./publicador-estado.service");
+const { config, MODOS } = require("../config/env");
 const { PERFIS } = require("./auth.service");
 
 const { STATUS, APROVACAO } = publicacoesRepository;
@@ -46,6 +53,11 @@ function semResposta(publicacao) {
     );
 }
 
+/** Horário perdido com o Publicador desligado. */
+function atrasada(publicacao) {
+    return publicacao.status === STATUS.ATRASADA;
+}
+
 /** Prazo esgotado e ainda dentro dos 30 dias. */
 function podeRetomar(publicacao, agora = Date.now()) {
     return (
@@ -69,8 +81,13 @@ async function buscarRetomavel(id, autor) {
         }
     }
 
+    if (atrasada(publicacao)) {
+        if (autor.perfil !== PERFIS.ADMIN) throw new ErroHttp(404, "Publicação não encontrada.");
+        return publicacao;
+    }
+
     if (!semResposta(publicacao)) {
-        throw new ErroHttp(409, "Só dá para publicar ou agendar posts que ficaram sem resposta.");
+        throw new ErroHttp(409, "Só dá para publicar ou agendar posts que ficaram sem resposta ou atrasados.");
     }
 
     if (!podeRetomar(publicacao)) {
@@ -97,11 +114,11 @@ function validarNovoHorario(valor) {
     return data;
 }
 
-/** Atualiza só se continuar "sem resposta" (evita publicar em dobro). */
-async function gravar(id, campos) {
+/** Atualiza só se o status não mudou desde a leitura (evita publicar em dobro). */
+async function gravar(id, campos, statusAtual) {
     let atualizada;
     try {
-        atualizada = await publicacoesRepository.atualizarSeStatus(id, campos, [STATUS.RECUSADA]);
+        atualizada = await publicacoesRepository.atualizarSeStatus(id, campos, [statusAtual]);
     } catch (erro) {
         if (/retomada|horario_original/.test(erro?.message || "")) {
             throw new ErroHttp(500, "Função indisponível: execute a migração 010 no Supabase.");
@@ -120,6 +137,18 @@ function camposDaRetomada(publicacao, autor, novoHorario) {
     const ehEquipe = autor.perfil === PERFIS.ADMIN;
     const agora = new Date().toISOString();
 
+    // Atrasada já tinha sido aprovada (ou não precisava): a aprovação fica igual.
+    if (atrasada(publicacao)) {
+        return {
+            retomada_por: autor.id ?? null,
+            retomada_pela_equipe: true,
+            retomada_em: agora,
+            horario_original: publicacao.horario_original || publicacao.data_hora,
+            data_hora: novoHorario.toISOString(),
+            erro: null
+        };
+    }
+
     return {
         aprovacao: APROVACAO.DEFERIDA,
         aprovacao_por: autor.id,
@@ -137,10 +166,10 @@ function camposDaRetomada(publicacao, autor, novoHorario) {
 }
 
 /**
- * Publica agora um post sem resposta. Responde logo; a automação roda em
- * segundo plano (leva cerca de 1 minuto) e grava o resultado.
+ * Publica agora um post sem resposta ou atrasado: entra na fila do
+ * Publicador com o horário atual e sai em instantes (cerca de 1 minuto).
  *
- * @returns {Promise<object>} A publicação, já com status `publicando`.
+ * @returns {Promise<object>} A publicação, agendada para agora.
  */
 async function publicarAgora(id, autor) {
     const publicacao = await buscarRetomavel(id, autor);
@@ -162,16 +191,15 @@ async function publicarAgora(id, autor) {
         throw erro;
     }
 
+    if (config.modo === MODOS.API) await publicadorEstado.exigirOnline("publicar agora");
+
     const atualizada = await gravar(id, {
         ...camposDaRetomada(publicacao, autor, new Date()),
-        status: STATUS.PUBLICANDO
-    });
+        status: STATUS.AGENDADA
+    }, publicacao.status);
 
     log.info(`Publicação ${id} retomada: publicar agora`, { por: autor.id });
-
-    executarPublicacao(atualizada).catch((erro) => {
-        log.erro(`Erro inesperado ao publicar a retomada ${id}`, formatarErro(erro));
-    });
+    agendador.agendar(atualizada);
 
     return atualizada;
 }
@@ -189,7 +217,7 @@ async function agendarDeNovo(id, dataHora, autor) {
     const atualizada = await gravar(id, {
         ...camposDaRetomada(publicacao, autor, novoHorario),
         status: STATUS.AGENDADA
-    });
+    }, publicacao.status);
 
     agendador.agendar(atualizada);
     log.info(`Publicação ${id} retomada: agendada`, { por: autor.id, dataHora: atualizada.data_hora });
@@ -214,6 +242,7 @@ module.exports = {
     DIAS_PARA_RETOMAR,
     ACOES,
     semResposta,
+    atrasada,
     podeRetomar,
     retomar,
     publicarAgora,

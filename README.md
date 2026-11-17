@@ -2,14 +2,19 @@
 
 Aplicação para **criar, agendar e publicar posts no Instagram**.
 O frontend (Vue) envia imagem + legenda + data ao backend (Express), que guarda
-tudo no Supabase e, na hora certa, publica no Instagram Web por meio de
-automação de navegador (Playwright).
+tudo no Supabase. O **Publicador** consulta o banco e, na hora certa, publica no
+Instagram Web por meio de automação de navegador (Playwright).
 
 ```
-Vue (frontend) ──HTTP──▶ Express (backend) ──▶ Supabase (Postgres)
-                              │
-                              └──▶ Playwright ──▶ instagram.com
+Vue (frontend) ──HTTP──▶ Express (API) ──▶ Supabase (Postgres + Storage)
+                                                   ▲
+            Publicador (computador do admin) ──────┘
+                 └──▶ Playwright ──▶ instagram.com
 ```
+
+No seu computador tudo roda junto (`npm run dev:backend`, modo **completo**). No
+ar, o site e a API ficam na **Vercel** (24 h, grátis) e o **Publicador** é um app
+no computador do administrador: veja [Colocar no ar](#colocar-no-ar).
 
 ## Estrutura
 
@@ -27,8 +32,12 @@ ig-manager/
 │  │  ├─ automacao/instagram/   Playwright: sessão, passos, seletores
 │  │  ├─ middlewares/           Upload (multer) e tratamento de erros
 │  │  └─ lib/                   Logger, erros, cliente Supabase
-│  ├─ scripts/                  Login manual no Instagram, teste de conexão
+│  │  ├─ publicador/ciclo.js    Publicador: publica o que venceu e atende o site
+│  ├─ scripts/                  Login manual no Instagram, teste de conexão,
+│  │                            Publicador no terminal
 │  └─ storage/                  (gerado, não versionado) uploads, logs, sessão
+├─ api/index.js                Entrada da API na Vercel (mesmo Express, modo "api")
+├─ publicador/                  App IG Manager Publicador (Electron)
 └─ frontend/                    Interface (Vue 3 + Vite + vue-router)
    └─ src/
       ├─ api/                   Chamadas HTTP ao backend
@@ -58,10 +67,26 @@ npm run dev:backend                    # http://localhost:3000
 npm run dev:frontend                   # http://localhost:5173
 ```
 
-## Colocar no ar (servidor)
+## Colocar no ar
 
-Passo a passo para a Oracle Cloud Always Free, com instalação automática e
-HTTPS sem domínio próprio: [`deploy/oracle/README.md`](deploy/oracle/README.md).
+**Recomendado — Vercel + Publicador:** site e API 24 h na Vercel (grátis); só
+publicar e conectar perfis dependem do computador do administrador ligado, com o
+app **IG Manager Publicador** aberto. Passo a passo:
+[`deploy/vercel/README.md`](deploy/vercel/README.md).
+
+| Modo (`IG_MODO`) | Onde | O que faz |
+|---|---|---|
+| `completo` (padrão) | seu computador | API + Publicador juntos (desenvolvimento) |
+| `api` | Vercel | Só a API; publicar/conectar/coletar viram pedidos ao Publicador |
+| `publicador` | app Publicador / `npm run publicador` | Publica o que venceu e atende os pedidos do site |
+
+**Atrasadas:** o que vence com o Publicador desligado (ou o computador dormindo)
+**não sai sozinho**: vira *Atrasada* e, ao voltar, o Publicador pergunta se publica
+agora ou reagenda (também dá pelo ⋯ em Postagens). Ao fechar o Publicador ou desligar
+o Windows, ele avisa quantas publicações estão agendadas e para quais horários.
+
+**Alternativa — Oracle Cloud Always Free** (servidor próprio, quando houver vaga):
+[`deploy/oracle/README.md`](deploy/oracle/README.md).
 
 No servidor (sem tela), `CONEXAO_NO_SERVIDOR=false`: o "Conectar" do
 Instagram vira **Enviar sessão** — o login é feito no computador com
@@ -73,13 +98,19 @@ Clientes → ⋯ → Enviar sessão (`POST /perfis/:id/sessao`, só administrado
 - `clientes`: `id`, `nome`, `ativo`
 - `usuarios`: `id`, `nome`, `email`, `senha_hash`, `perfil` (`admin` | `cliente`), `cliente_id`, `ativo`
 - `contas_instagram` (perfis do Instagram): `id`, `nome`, `username`, `ativo`, `cliente_id`,
-  `sessao_expirada_em`, `sessao_erro` (preenchidos quando o Instagram pede login de novo)
+  `sessao_expirada_em`, `sessao_erro` (preenchidos quando o Instagram pede login de novo),
+  `sessao_salva_em` (011: o Publicador tem a sessão salva)
 - `publicacoes`: `id`, `conta_id`, `imagem`, `texto`, `data_hora`, `status`, `erro`
   - `status`: `agendada` → `publicando` → `publicada` | `erro`; `agendada` ⇄ `recusada`
-    (indeferida pelo cliente)
+    (indeferida pelo cliente); `agendada` → `atrasada` (011: horário perdido com o
+    Publicador desligado)
   - aprovação (migração 008): `aprovacao` (`pendente` | `deferida` | `indeferida`; nula =
     publicada na hora), `aprovacao_por`, `aprovacao_pela_equipe`, `aprovacao_em`,
     `aprovacao_categoria`, `aprovacao_motivo`
+- `tarefas_automacao` (011): pedidos do site ao Publicador (`conectar`, `desconectar`,
+  `coletar_comentarios`)
+- `publicador_estado` (011): sinal de vida do Publicador (ligado/desligado)
+- Storage `publicacoes` (011): imagens das postagens quando o site está na Vercel
 
 ## Perfis de acesso
 
@@ -135,7 +166,7 @@ Quem está com senha temporária só acessa `/auth/*` até criar a própria senh
 | POST | `/clientes/:id/link` | admin | Link para o cliente informar o @ (`validadeHoras`: 24, 72 ou 168) |
 | GET | `/perfis` | admin | Perfis ativos com cliente e `status` (`conectado`, `aguardando`, `expirada`) |
 | GET | `/perfis/atencao` | admin | Perfis com sessão expirada |
-| GET | `/perfis/config` | admin | `{ conexaoNoServidor }` |
+| GET | `/perfis/config` | admin | `{ conexaoNoServidor, envioDeSessao, modo, publicador: { online, ultimoSinal } }` |
 | POST | `/perfis/:id/sessao` | admin | Multipart `arquivo`: sessão do Instagram gerada pelo `login:instagram` |
 | PATCH | `/perfis/:id` | admin | Renomeia (`nome`) |
 | DELETE | `/perfis/:id` | admin | Remove; recusado (409) se o perfil tiver publicações |
@@ -154,9 +185,10 @@ Quem está com senha temporária só acessa `/auth/*` até criar a própria senh
 | POST | `/contas/:id/conectar` | admin | Abre o Chromium para o login no Instagram |
 | GET / DELETE | `/contas/:id/conexao` | admin | Situação da conexão / desconecta |
 | GET | `/publicacoes` | admin | Publicações com dados da conta |
-| POST | `/publicacoes` | admin | Cria (multipart: `imagem`, `texto`, `dataHora`, `conta_id`); publicar agora é recusado (400) se o perfil não estiver conectado; agendada nasce com aprovação pendente |
-| POST | `/publicacoes/:id/retomar` | admin | O mesmo, em nome do cliente |
-| POST | `/publicacoes/:id/cancelar` | admin | Cancela uma agendada/recusada (vira `cancelada`; não apaga) |
+| POST | `/publicacoes` | admin | Cria (multipart: `imagem`, `texto`, `dataHora`, `conta_id`); agendada nasce com aprovação pendente; publicar agora responde 202 e entra na fila do Publicador (recusado se o perfil não estiver conectado ou, na Vercel, com o Publicador desligado) |
+| POST | `/publicacoes/:id/retomar` | admin | Sem resposta (em nome do cliente) ou atrasada: `{ acao: "publicar" }` ou `{ acao: "agendar", dataHora }` |
+| POST | `/publicacoes/:id/cancelar` | admin | Cancela uma agendada/recusada/atrasada (vira `cancelada`; não apaga) |
+| GET | `/tarefas/:id` | admin | Andamento de um pedido ao Publicador (ex.: coleta de comentários) |
 | POST | `/publicacoes/:id/aprovacao` | admin | Responde em nome do cliente (mesmo corpo do cliente) |
 | GET | `/publicacoes/:id` | admin | Uma publicação |
 
@@ -167,7 +199,7 @@ agora* não. **Só é publicada se estiver deferida**: sem resposta até o horá
 prazo se esgota e ela vira *Recusada* (não sai, nem com o servidor atrasado). Indeferida
 também não é publicada (vira *Recusada*); para mudar o conteúdo, crie outra publicação. O cliente pode trocar a
 resposta até o horário, e o administrador pode responder em nome dele (fica
-registrado como "pela equipe"). No horário, o agendador relê o banco e pula as recusadas.
+registrado como "pela equipe"). No horário, o Publicador relê o banco e pula as recusadas.
 Post **sem resposta** não se perde: fica 30 dias na aba *Sem resposta* (Aprovações do
 cliente) e no menu ⋯ de Postagens, com **Publicar agora** (exige o perfil conectado) e
 **Agendar** (novo horário, já deferido). Fica registrado quem retomou e o horário original.
@@ -176,8 +208,9 @@ O administrador também pode **cancelar** uma agendada (menu ⋯ em Postagens): 
 
 **Conexão pelo cliente:** com `CONEXAO_PELO_CLIENTE=true` (padrão) o cliente vê o
 botão *Conectar* em *Meus perfis*. O Chromium abre **no computador do backend**, então
-isso só faz sentido com tudo na mesma máquina; em servidor, use `false` até existir
-um navegador remoto. Desconectar continua só com o administrador.
+isso só faz sentido com tudo na mesma máquina; no site da Vercel o botão fica oculto
+(o Chromium abriria no computador do Publicador) até existir o navegador remoto.
+Desconectar continua só com o administrador.
 
 **Sessão expirada:** se, ao publicar, o Instagram pedir login ou verificação de
 novo, o perfil é marcado como *Sessão expirada* (`sessao_expirada_em`). Ele aparece

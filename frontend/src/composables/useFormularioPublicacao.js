@@ -7,6 +7,7 @@ import { computed, onUnmounted, ref } from "vue";
 import { criarPublicacao } from "../api/publicacoes";
 import { IMAGEM } from "../constants/publicacoes";
 import { dataDeHoje } from "../utils/formatadores";
+import { prepararImagem } from "../utils/imagem";
 
 /**
  * @returns Estado e ações do formulário. Principais itens:
@@ -140,11 +141,13 @@ export function useFormularioPublicacao() {
 
     try {
       const dataHora = agendado ? montarDataHoraAgendada() : new Date().toISOString();
+      // Uma vez só (vale para todos os perfis): imagens grandes são reduzidas.
+      const imagem = await prepararImagem(arquivo.value);
       const resultados = [];
       for (const contaId of contaIds.value) {
         try {
           const resultado = await criarPublicacao({
-            imagem: arquivo.value,
+            imagem,
             texto: texto.value.trim(),
             dataHora,
             contaId,
@@ -158,7 +161,9 @@ export function useFormularioPublicacao() {
       const falhas = resultados.length - concluidas;
       definirMensagem(
         falhas === 0
-          ? `${concluidas} publicação(ões) ${agendado ? "agendada(s)" : "concluída(s)"} com sucesso.`
+          ? agendado
+            ? `${concluidas} publicação(ões) agendada(s) com sucesso.`
+            : `${concluidas} publicação(ões) enviada(s): saem em instantes. Acompanhe o resultado em Postagens.`
           : `${concluidas} concluída(s) e ${falhas} com falha. Confira o histórico de Postagens.`,
         falhas === 0,
         falhas > 0 && concluidas > 0

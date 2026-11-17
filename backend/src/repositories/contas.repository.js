@@ -6,7 +6,11 @@ const { supabase } = require("../lib/supabase");
 
 const TABELA = "contas_instagram";
 /** Colunas de `sessao_*` criadas na migração 007. */
-const COLUNAS = "id, nome, username, ativo, cliente, cliente_id, sessao_expirada_em, sessao_erro";
+/**
+ * `*` para incluir colunas de migrações recentes (ex.: `sessao_salva_em`,
+ * da 011) sem quebrar enquanto a migração não for executada.
+ */
+const COLUNAS = "*";
 
 async function listarAtivas() {
     const { data, error } = await supabase.from(TABELA)
@@ -45,7 +49,7 @@ async function buscarPorUsername(username) {
  */
 async function listarPorCliente(clienteId) {
     const { data, error } = await supabase.from(TABELA)
-        .select(`${COLUNAS}, cadastrada_em, autor:usuarios!cadastrada_por(nome)`)
+        .select(`${COLUNAS}, autor:usuarios!cadastrada_por(nome)`)
         .eq("cliente_id", clienteId)
         .order("id", { ascending: true });
     if (error) throw error;
@@ -85,6 +89,18 @@ async function limparSessaoExpirada(id) {
         .update({ sessao_expirada_em: null, sessao_erro: null })
         .eq("id", id)
         .not("sessao_expirada_em", "is", null);
+    if (error) throw error;
+}
+
+/**
+ * Registra se o perfil tem sessão salva no computador do Publicador
+ * (`quando` = instante ISO) ou não (`null`). Coluna da migração 011: sem
+ * ela, apenas avisa quem chamou (o erro sobe).
+ */
+async function definirSessaoSalva(id, quando) {
+    const { error } = await supabase.from(TABELA)
+        .update({ sessao_salva_em: quando })
+        .eq("id", id);
     if (error) throw error;
 }
 
@@ -140,6 +156,7 @@ module.exports = {
     atualizar,
     marcarSessaoExpirada,
     limparSessaoExpirada,
+    definirSessaoSalva,
     excluir,
     criarConvite,
     buscarConvitePorHash,

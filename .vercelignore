@@ -1,0 +1,4 @@
+# Não vai para a Vercel: dados locais, app do Publicador e scripts da Oracle.
+backend/storage
+publicador
+deploy

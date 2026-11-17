@@ -8,7 +8,7 @@
       v-for="item in itens"
       :key="item.valor"
       class="summary-card"
-      :class="{ destaque: item.valor === FILTRO_AGUARDANDO && contagens[item.valor] > 0 }"
+      :class="{ destaque: (item.valor === FILTRO_AGUARDANDO || item.valor === 'atrasada') && contagens[item.valor] > 0 }"
     >
       <span>{{ item.rotulo }}</span>
       <strong>{{ contagens[item.valor] ?? 0 }}</strong>

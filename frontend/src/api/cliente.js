@@ -5,9 +5,12 @@
  * permite trocar de ambiente sem alterar código.
  */
 
-/** URL base da API, sem barra final. */
+/**
+ * URL base da API, sem barra final. Sem `VITE_API_URL`: em desenvolvimento
+ * o backend local; no site publicado (Vercel), `/api` no mesmo endereço.
+ */
 export const API_URL = (
-  import.meta.env.VITE_API_URL || "http://localhost:3000"
+  import.meta.env.VITE_API_URL || (import.meta.env.DEV ? "http://localhost:3000" : "/api")
 ).replace(/\/$/, "");
 
 /** Chamado quando a API responde 401 (sessão expirada). Ver `main.js`. */

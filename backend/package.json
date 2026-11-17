@@ -10,7 +10,8 @@
     "login:instagram": "node scripts/login-instagram.js",
     "verificar:conexao": "node scripts/verificar-conexao.js",
     "criar:admin": "node scripts/criar-admin.js",
-    "check": "node --check src/server.js"
+    "check": "node --check src/server.js",
+    "publicador": "node scripts/publicador.js"
   },
   "license": "ISC",
   "type": "commonjs",

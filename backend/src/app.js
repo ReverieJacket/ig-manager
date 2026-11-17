@@ -11,6 +11,7 @@ const { config } = require("./config/env");
 const routes = require("./routes");
 const { requisicoes } = require("./middlewares/requisicoes");
 const { rotaNaoEncontrada, tratarErros } = require("./middlewares/erros");
+const { linkTemporario } = require("./lib/imagens");
 
 /**
  * Cria e configura a aplicação Express.
@@ -33,15 +34,24 @@ function criarApp() {
     app.use(express.json());
     app.use(express.urlencoded({ extended: true }));
 
-    // Imagens enviadas, para o frontend exibir as miniaturas.
-    // Em produção, prefira armazenamento persistente (ex.: Supabase Storage).
-    app.use(
-        "/uploads",
-        express.static(config.diretorios.uploads, {
-            dotfiles: "deny",
-            index: false
-        })
-    );
+    // Imagens das postagens, para o frontend exibir as miniaturas.
+    if (config.imagensNoSupabase) {
+        // Storage privado: redireciona para um link temporário.
+        app.get("/uploads/:nome", async (req, res) => {
+            const link = await linkTemporario(req.params.nome);
+            if (!link) return res.status(404).json({ sucesso: false, mensagem: "Imagem não encontrada." });
+            res.set("Cache-Control", "private, max-age=3000");
+            res.redirect(302, link);
+        });
+    } else {
+        app.use(
+            "/uploads",
+            express.static(config.diretorios.uploads, {
+                dotfiles: "deny",
+                index: false
+            })
+        );
+    }
 
     app.use(routes);
 

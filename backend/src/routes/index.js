@@ -15,6 +15,7 @@ const clientesRoutes = require("./clientes.routes");
 const usuariosRoutes = require("./usuarios.routes");
 const minhaAreaRoutes = require("./minha-area.routes");
 const perfisRoutes = require("./perfis.routes");
+const tarefasRoutes = require("./tarefas.routes");
 const {
     autenticar,
     exigirSenhaDefinitiva,
@@ -48,6 +49,7 @@ router.use("/publicacoes", ...somenteAdmin, publicacoesRoutes);
 router.use("/clientes", ...somenteAdmin, clientesRoutes);
 router.use("/usuarios", ...somenteAdmin, usuariosRoutes);
 router.use("/perfis", ...somenteAdmin, perfisRoutes);
+router.use("/tarefas", ...somenteAdmin, tarefasRoutes);
 
 /* --------------------------- Rotas do cliente ---------------------------- */
 

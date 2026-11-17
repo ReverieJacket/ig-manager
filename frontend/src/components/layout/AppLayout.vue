@@ -75,17 +75,23 @@
     </aside>
 
     <main class="main-content">
+      <div v-if="ehAdmin && publicadorDesligado" class="alerta alerta--aviso faixa-publicador" role="status">
+        <strong>⏻ Publicador desligado.</strong>
+        Agendamentos, "Publicar agora", conexões e coleta de comentários ficam parados até o computador do
+        Publicador ser ligado (app IG Manager Publicador aberto). O resto do site funciona normalmente.
+      </div>
       <router-view />
     </main>
   </div>
 </template>
 
 <script setup>
-import { computed, ref, watch } from "vue";
+import { computed, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
 import { useAlertasPerfis } from "../../composables/useAlertasPerfis";
 import { useAprovacoesPendentes } from "../../composables/useAprovacoesPendentes";
+import { usePublicador } from "../../composables/usePublicador";
 import { useSessao } from "../../composables/useSessao";
 
 const router = useRouter();
@@ -93,7 +99,16 @@ const route = useRoute();
 const { usuario, ehAdmin, sair } = useSessao();
 const { totalEmAtencao, atualizar: atualizarAlertas } = useAlertasPerfis();
 const { totalPendentes, atualizar: atualizarAprovacoes } = useAprovacoesPendentes();
+const { desligado: publicadorDesligado, acompanhar: acompanharPublicador, parar: pararPublicador } = usePublicador();
 const saindo = ref(false);
+
+// Administrador: confere o Publicador de 1 em 1 minuto (aviso no topo).
+watch(
+  ehAdmin,
+  (admin) => (admin ? acompanharPublicador() : pararPublicador()),
+  { immediate: true }
+);
+onUnmounted(pararPublicador);
 
 // Gaveta do menu no celular: fecha sempre que a tela muda.
 const menuAberto = ref(false);
@@ -175,6 +190,11 @@ async function sairDoSistema() {
 </script>
 
 <style scoped>
+.faixa-publicador {
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
+
 .app-layout {
   min-height: 100vh;
   background: var(--cor-fundo);

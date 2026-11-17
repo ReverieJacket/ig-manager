@@ -162,7 +162,8 @@ const erro = ref("");
 const filtro = ref("todas");
 const contaFiltro = ref("");
 
-const ehProgramada = (post) => post.status === STATUS.AGENDADA || post.status === STATUS.PUBLICANDO;
+const ehProgramada = (post) =>
+  [STATUS.AGENDADA, STATUS.PUBLICANDO, STATUS.ATRASADA].includes(post.status);
 
 const aguardaAprovacao = (post) =>
   post.status === STATUS.AGENDADA && post.aprovacao === APROVACAO.PENDENTE;
@@ -171,6 +172,8 @@ function seloDe(post) {
   if (post.semResposta) return { rotulo: "Sem resposta", classe: "selo--aviso" };
   if (post.status === STATUS.PUBLICADA) return { rotulo: "Publicada", classe: "selo--sucesso" };
   if (post.status === STATUS.PUBLICANDO) return { rotulo: "Publicando", classe: "selo--info" };
+  // O horário passou com o computador da equipe desligado; ela vai publicar ou reagendar.
+  if (post.status === STATUS.ATRASADA) return { rotulo: "Atrasada · com a equipe", classe: "selo--aviso" };
   if (aguardaAprovacao(post)) return { rotulo: "Aguarda aprovação", classe: "selo--aviso" };
   return { rotulo: "Programada", classe: "selo--info" };
 }
