@@ -217,12 +217,21 @@ function registrarIpc() {
         }
     };
 
-    ipcMain.handle("atrasada:publicar", (_e, id) =>
-        executar(() => retomada.retomar(Number(id), { acao: "publicar" }, AUTOR()))
+    /** Resolvida: sai da lista (contador do menu do ícone). */
+    const tirarDaLista = (id, r) => {
+        if (r.sucesso) {
+            atrasadas = atrasadas.filter((p) => Number(p.id) !== Number(id));
+            atualizarProximas();
+        }
+        return r;
+    };
+
+    ipcMain.handle("atrasada:publicar", async (_e, id) =>
+        tirarDaLista(id, await executar(() => retomada.retomar(Number(id), { acao: "publicar" }, AUTOR())))
     );
 
-    ipcMain.handle("atrasada:reagendar", (_e, id, dataHora) =>
-        executar(() => retomada.retomar(Number(id), { acao: "agendar", dataHora }, AUTOR()))
+    ipcMain.handle("atrasada:reagendar", async (_e, id, dataHora) =>
+        tirarDaLista(id, await executar(() => retomada.retomar(Number(id), { acao: "agendar", dataHora }, AUTOR())))
     );
 
     ipcMain.handle("atrasadas:publicar-todas", async () => {

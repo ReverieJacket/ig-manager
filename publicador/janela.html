@@ -46,6 +46,17 @@
     return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
   }
 
+  /** Atrasadas ainda sem decisão; ao zerar, a janela fecha sozinha. */
+  let pendentes = 0;
+  function resolvida() {
+    pendentes--;
+    if (pendentes > 0) return;
+    $("titulo").textContent = "Tudo resolvido ✓";
+    $("descricao").textContent = "As publicações atrasadas foram para a fila ou reagendadas. Esta janela fecha sozinha.";
+    $("rodape").innerHTML = "";
+    setTimeout(() => window.publicador.fechar(), 2500);
+  }
+
   function cartao(p, comAcoes) {
     const div = document.createElement("div");
     div.className = "item";
@@ -61,7 +72,10 @@
     const mostrar = (r, okTexto) => {
       resultado.className = "resultado " + (r.sucesso ? "ok" : "erro");
       resultado.textContent = r.sucesso ? okTexto : r.mensagem;
-      if (r.sucesso) acoes.querySelectorAll("button, input").forEach((e) => (e.disabled = true));
+      if (r.sucesso) {
+        acoes.querySelectorAll("button, input").forEach((e) => (e.disabled = true));
+        resolvida();
+      }
     };
     acoes.append(
       botao("▶ Publicar agora", "primario", async () => mostrar(await window.publicador.publicarAgora(p.id), "Na fila: sai em instantes.")),
@@ -86,6 +100,7 @@
       $("descricao").textContent =
         "O horário destas publicações passou enquanto o Publicador estava desligado, por isso elas não foram publicadas. " +
         "Escolha publicar agora ou fazer um novo agendamento.";
+      pendentes = dados.itens.length;
       dados.itens.forEach((p) => lista.append(cartao(p, true)));
       if (!dados.itens.length) lista.innerHTML = '<p class="vazio">Nenhuma publicação atrasada.</p>';
       rodape.append(
@@ -94,6 +109,11 @@
           e.target.disabled = true;
           const r = await window.publicador.publicarTodas();
           $("descricao").textContent = r.mensagem;
+          if (r.sucesso) {
+            $("titulo").textContent = "Tudo resolvido ✓";
+            rodape.innerHTML = "";
+            setTimeout(() => window.publicador.fechar(), 2500);
+          }
         })
       );
       return;
