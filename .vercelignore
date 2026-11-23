@@ -1,4 +1,5 @@
 # Não vai para a Vercel: dados locais, app do Publicador e scripts da Oracle.
-backend/storage
-publicador
-deploy
+# A barra inicial vale só para a raiz (backend/src/publicador precisa ir).
+/backend/storage
+/publicador
+/deploy
