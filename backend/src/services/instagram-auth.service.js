@@ -15,18 +15,46 @@ const { obterArquivoSessao } = require("../automacao/instagram/sessao");
 const { config } = require("../config/env");
 const { ErroHttp } = require("../lib/erros");
 const { criarLogger } = require("../lib/logger");
-const contasService = require("./contas.service");
-const contasRepository = require("../repositories/contas.repository");
-
 const log = criarLogger("Conexao");
 const processos = new Map();
 
+/**
+ * Onde buscar o perfil e avisar sobre a sessão. Padrão: o banco direto
+ * (backend completo / npm run publicador). O app Publicador instalado troca
+ * por chamadas ao site (`configurar`), pois não tem a chave do banco.
+ */
+let dados = null;
+
+function porta() {
+  if (!dados) {
+    const contasService = require("./contas.service");
+    const contasRepository = require("../repositories/contas.repository");
+    dados = {
+      buscarConta: (id) => contasService.buscarContaAtiva(id),
+      sessaoSalva: async (id) => {
+        await contasRepository.limparSessaoExpirada(id).catch(() => {});
+        await contasRepository.definirSessaoSalva(id, new Date().toISOString());
+      },
+      sessaoRemovida: async (id) => {
+        await contasRepository.limparSessaoExpirada(id).catch(() => {});
+        await contasRepository.definirSessaoSalva(id, null);
+      }
+    };
+  }
+  return dados;
+}
+
+/** Troca a origem dos dados (app Publicador: o site, por login). */
+function configurar(novos) {
+  dados = novos;
+}
+
 /** Avisa o banco; sem a migração 011 apenas registra (o arquivo vale igual). */
-async function registrarSessaoNoBanco(id, quando) {
+async function avisar(fn, id) {
   try {
-    await contasRepository.definirSessaoSalva(id, quando);
+    await fn(id);
   } catch (erro) {
-    log.aviso(`Perfil ${id}: não foi possível registrar a sessão no banco (migração 011?)`, erro?.message);
+    log.aviso(`Perfil ${id}: não foi possível registrar a sessão (migração 011?)`, erro?.message);
   }
 }
 
@@ -42,7 +70,7 @@ async function iniciar(contaId) {
       "(npm run login:instagram -- --conta " + id + ") e use \"Enviar sessão\" no menu ⋯ do perfil."
     );
   }
-  const conta = await contasService.buscarContaAtiva(id);
+  const conta = await porta().buscarConta(id);
   if (!conta) throw new ErroHttp(404, "Conta não encontrada ou inativa.");
   if (processos.has(id)) return estado(id);
 
@@ -50,7 +78,7 @@ async function iniciar(contaId) {
   const p = { contaId: id, username: conta.username, status: "iniciando", mensagem: "Abrindo navegador", browser: null, context: null, page: null, timer: null };
   processos.set(id, p);
   try {
-    p.browser = await chromium.launch({ headless: false });
+    p.browser = await chromium.launch({ headless: false, channel: process.env.IG_NAVEGADOR_CANAL || undefined });
     p.context = await p.browser.newContext({ viewport: { width: 1366, height: 768 }, locale: "pt-BR" });
     p.page = await p.context.newPage();
     await p.page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 60000 });
@@ -80,8 +108,7 @@ async function concluirSeAutenticado(p) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   await p.context.storageState({ path: file });
   // Sessão nova: o perfil deixa de aparecer como "Sessão expirada".
-  await contasRepository.limparSessaoExpirada(p.contaId).catch(() => {});
-  await registrarSessaoNoBanco(p.contaId, new Date().toISOString());
+  await avisar(porta().sessaoSalva, p.contaId);
   p.status = "conectado"; p.mensagem = "Sessão salva. Confira se o perfil aberto corresponde à conta cadastrada.";
   await encerrar(p);
 }
@@ -134,8 +161,7 @@ async function desconectar(id) {
   await desconectarProcesso(n);
   const file = obterArquivoSessao(n);
   if (fs.existsSync(file)) fs.unlinkSync(file);
-  await contasRepository.limparSessaoExpirada(n).catch(() => {});
-  await registrarSessaoNoBanco(n, null);
+  await avisar(porta().sessaoRemovida, n);
   return { contaId: n, status: "desconectado", mensagem: "Sessão local removida." };
 }
 
@@ -147,4 +173,4 @@ function contaConectada(id) {
   try { return fs.existsSync(obterArquivoSessao(id)); } catch { return false; }
 }
 
-module.exports = { iniciar, consultar, desconectar, desconectarProcesso, contaConectada };
+module.exports = { iniciar, consultar, desconectar, desconectarProcesso, contaConectada, configurar };

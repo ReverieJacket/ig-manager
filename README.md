@@ -74,6 +74,11 @@ publicar e conectar perfis dependem do computador do administrador ligado, com o
 app **IG Manager Publicador** aberto. Passo a passo:
 [`deploy/vercel/README.md`](deploy/vercel/README.md).
 
+O Publicador é instalado pelo `.exe` em **Releases** (gerado pelo GitHub Actions a
+cada tag `publicador-v*`): o administrador instala, entra com o e-mail e a senha do
+site (o login fica salvo criptografado, sem a senha) e ele passa a iniciar com o
+Windows.
+
 | Modo (`IG_MODO`) | Onde | O que faz |
 |---|---|---|
 | `completo` (padrão) | seu computador | API + Publicador juntos (desenvolvimento) |

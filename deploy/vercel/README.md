@@ -70,7 +70,52 @@ senha de administrador de sempre.
 
 ## 3. Instalar o Publicador no computador do administrador (Windows)
 
-No PowerShell, na pasta do projeto:
+### Pelo instalador (recomendado)
+
+1. No GitHub do projeto, abra **Releases** e baixe o
+   `IG-Manager-Publicador-Setup-x.y.z.exe` da versão mais recente.
+2. Execute. Se o Windows mostrar **"O Windows protegeu o computador"**, clique em
+   **Mais informações → Executar assim mesmo** (o instalador não tem assinatura
+   digital paga; é esperado).
+3. Siga o instalador (Avançar → Instalar). Ele cria atalhos na área de trabalho e
+   no menu Iniciar e abre o Publicador no fim.
+4. Na janela de entrada, informe o **e-mail e a senha de administrador** do site.
+   O endereço do site já vem preenchido (dá para trocar em *Endereço do site*).
+5. Pronto: o ícone aparece ao lado do relógio (às vezes escondido na setinha
+   **^**) e o site passa a mostrar o Publicador ligado.
+
+- **Login salvo:** o Publicador não guarda a senha. Ele guarda um acesso de
+  180 dias, criptografado pelo próprio Windows (só abre neste usuário deste
+  computador). Trocar a senha no site derruba esse acesso; o Publicador pede o
+  login de novo.
+- **Só administradores** entram no Publicador. Usuário com senha provisória
+  precisa trocá-la no site primeiro.
+- **Inicia sozinho com o Windows** (padrão). Para desligar: botão direito no
+  ícone → desmarque **Iniciar com o Windows**. A escolha fica salva.
+- **Navegador:** o instalado usa o **Microsoft Edge** que já vem no Windows para
+  publicar e conectar perfis; não precisa baixar o Chromium.
+- **Perfis:** as sessões do Instagram ficam em
+  `%APPDATA%\IG Manager Publicador\dados`. Quem usava o Publicador pelo
+  `npm start` precisa **conectar os perfis de novo** uma vez (site → Clientes →
+  Conectar).
+- **Atualizar:** baixe o instalador da versão nova e execute por cima; login e
+  perfis são mantidos.
+- **Desinstalar:** Configurações do Windows → Aplicativos → IG Manager
+  Publicador.
+
+### Gerar uma versão nova do instalador
+
+Quem mantém o código: aumente `version` em `publicador/package.json`, faça o
+commit e crie a tag `publicador-vX.Y.Z` (ex.: `git tag publicador-v1.0.1` e
+`git push origin publicador-v1.0.1`). O GitHub Actions
+(`.github/workflows/publicador.yml`) monta o `.exe` no Windows e publica em
+**Releases**. Também dá para rodar o workflow pela aba **Actions → Run
+workflow**; nesse caso o `.exe` fica nos *Artifacts* da execução.
+
+Para gerar no próprio computador: `cd publicador`, `npm install`,
+`npm run instalador` → o `.exe` sai em `publicador\dist`.
+
+### Pelo código (desenvolvimento)
 
 ```powershell
 git pull
@@ -82,15 +127,7 @@ npm install
 npm start
 ```
 
-- Um **ícone azul com uma seta** aparece ao lado do relógio (às vezes fica
-  escondido na setinha **^**). Pronto: o site passa a mostrar o Publicador
-  ligado.
-- Ele **inicia sozinho com o Windows**. Para desligar isso: clique com o botão
-  direito no ícone e desmarque **Iniciar com o Windows**.
-- No `backend\.env`, coloque `PUBLICADOR_SITE_URL=https://SEU-ENDERECO` para o
-  item **Abrir o site** do menu do ícone funcionar.
-- Os perfis que já estavam conectados neste computador são reconhecidos
-  sozinhos.
+Pede o mesmo login. Os registros ficam em `backend\storage\logs`.
 
 > **Use um Publicador só.** Com o app aberto, **não** rode
 > `npm run dev:backend` ao mesmo tempo. Se quiser testar o site localmente,
@@ -109,20 +146,24 @@ npm start
 
 Menu do ícone (botão direito):
 
+- Conta (quem está conectado) / Entrar…
+- Abrir o site
 - Próximas publicações
 - Publicações atrasadas
-- Abrir o site
 - Iniciar com o Windows
-- Abrir a pasta de registros (`backend\storage\logs`)
-- Sair
+- Abrir a pasta de registros
+- Sair da conta
+- Fechar o Publicador
 
 ## Problemas comuns
 
 | Problema | Solução |
 |---|---|
-| Site mostra "Publicador desligado" com o app aberto | Confira a internet do computador e se a migração 011 foi executada; veja os registros em `backend\storage\logs\backend.log` |
+| Site mostra "Publicador desligado" com o app aberto | Confira a internet do computador e se a migração 011 foi executada; veja os registros (menu do ícone → Abrir a pasta de registros) |
+| Publicador pede login toda hora | A senha foi trocada no site ou o usuário deixou de ser administrador; entre de novo |
+| "Só administradores podem usar o Publicador" | Entre com uma conta de administrador; se a senha for provisória, troque no site antes |
+| Conectar/publicar não abre o navegador | Confira se o Microsoft Edge está instalado e atualizado |
 | "Função indisponível: execute a migração 011" | Rode a migração 011 no Supabase |
-| Erro ao abrir o app: variáveis ausentes | O `backend\.env` precisa ter `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` |
 | Imagem não aparece no site | Rode a migração 011 (cria o bucket `publicacoes`) |
 | Login no site não fica salvo | Confira `NODE_ENV=production` e `AUTH_SEGREDO` na Vercel |
 

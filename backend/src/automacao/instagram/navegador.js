@@ -37,7 +37,8 @@ async function abrirSessao(contaId) {
 
     // headless: false — o Instagram bloqueia com mais frequência
     // navegadores sem interface.
-    const navegador = await chromium.launch({ headless: false });
+    // IG_NAVEGADOR_CANAL=msedge: o app instalado usa o Edge do Windows.
+    const navegador = await chromium.launch({ headless: false, channel: process.env.IG_NAVEGADOR_CANAL || undefined });
     const fechar = () => navegador.close().catch(() => {});
     let pagina;
 

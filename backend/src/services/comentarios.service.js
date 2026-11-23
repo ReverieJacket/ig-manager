@@ -5,7 +5,6 @@
  * expõe a listagem paginada para a API.
  */
 const { ErroHttp, formatarErro } = require("../lib/erros");
-const { filaAutomacao } = require("../lib/fila");
 const { criarLogger } = require("../lib/logger");
 const comentariosRepository = require("../repositories/comentarios.repository");
 const curtidasRepository = require("../repositories/curtidas.repository");
@@ -167,18 +166,40 @@ async function coletarComentarios(publicacaoId) {
         );
     }
 
-    let coleta;
+    const coleta = await coletarNoInstagram(publicacao);
 
+    return sincronizarColeta(publicacao, coleta);
+}
+
+/**
+ * Só a automação: lê os comentários do post no Instagram (computador do
+ * Publicador). Roda na fila da automação (um navegador por vez).
+ *
+ * @param {{id: number, conta_id: number, ig_codigo: string}} publicacao
+ * @throws {ErroHttp} 502 (falha ao acessar o Instagram).
+ */
+async function coletarNoInstagram(publicacao) {
     try {
         // Carregado só aqui: o site (Vercel) não usa o navegador.
-        const { coletarComentariosDoPost } = require("../automacao/instagram/coletar");
-        coleta = await filaAutomacao.executar(() =>
-            coletarComentariosDoPost(publicacao.conta_id, publicacao.ig_codigo)
-        );
+        return await require("../publicador/automacao").coletarComentarios(publicacao);
     } catch (erro) {
-        log.erro(`Falha ao coletar comentários da publicação ${publicacaoId}`, formatarErro(erro));
+        log.erro(`Falha ao coletar comentários da publicação ${publicacao.id}`, formatarErro(erro));
 
         throw new ErroHttp(502, `Não foi possível coletar os comentários: ${formatarErro(erro)}`);
+    }
+}
+
+/**
+ * Só o banco: grava o que foi coletado (lado do servidor).
+ *
+ * @param {{id: number, conta_id: number}} publicacao
+ * @param {{comentarios: object[], completa: boolean, respostasCompletas?: boolean,
+ *          curtidas?: object}} coleta
+ */
+async function sincronizarColeta(publicacao, coleta) {
+    const publicacaoId = publicacao.id;
+    if (!coleta || !Array.isArray(coleta.comentarios)) {
+        throw new ErroHttp(400, "Coleta de comentários inválida.");
     }
 
     const agora = new Date().toISOString();
@@ -282,4 +303,4 @@ async function definirCodigoPost(publicacaoId, codigo) {
     return publicacoesRepository.atualizar(publicacaoId, { ig_codigo: codigo });
 }
 
-module.exports = { listarComentarios, coletarComentarios, definirCodigoPost };
+module.exports = { listarComentarios, coletarComentarios, coletarNoInstagram, sincronizarColeta, definirCodigoPost };

@@ -15,8 +15,16 @@ const { ErroHttp } = require("../lib/erros");
 const { lerCookie } = require("../lib/cookies");
 const authService = require("../services/auth.service");
 
+/** Token do app Publicador: `Authorization: Bearer <token>`. */
+function lerBearer(req) {
+    const cabecalho = req.headers.authorization;
+    if (typeof cabecalho !== "string" || !cabecalho.startsWith("Bearer ")) return undefined;
+    return cabecalho.slice(7).trim() || undefined;
+}
+
 async function autenticar(req, res, next) {
-    const resultado = await authService.lerSessao(lerCookie(req, config.auth.nomeCookie));
+    const token = lerCookie(req, config.auth.nomeCookie) || lerBearer(req);
+    const resultado = await authService.lerSessao(token);
 
     if (!resultado) {
         throw new ErroHttp(401, "Sessão expirada ou inexistente. Entre novamente.");

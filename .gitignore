@@ -30,3 +30,7 @@ playwright/.cache/
 # Sistema operacional / editores
 .DS_Store
 Thumbs.db
+
+# App Publicador: cópia do backend e instaladores gerados
+publicador/backend/
+publicador/dist/

@@ -16,12 +16,16 @@ const usuariosRoutes = require("./usuarios.routes");
 const minhaAreaRoutes = require("./minha-area.routes");
 const perfisRoutes = require("./perfis.routes");
 const tarefasRoutes = require("./tarefas.routes");
+const publicadorRoutes = require("./publicador.routes");
+const { limitarLogin, registrarFalha, registrarSucesso } = require("../middlewares/limiteLogin");
+const { ErroHttp } = require("../lib/erros");
 const {
     autenticar,
     exigirSenhaDefinitiva,
     exigirPerfil
 } = require("../middlewares/autenticacao");
-const { PERFIS } = require("../services/auth.service");
+const authService = require("../services/auth.service");
+const { PERFIS } = authService;
 
 const router = Router();
 
@@ -37,6 +41,19 @@ router.get("/", (req, res) => {
 
 router.use("/auth", authRoutes);
 
+// Login do app IG Manager Publicador (devolve um token em vez de cookie).
+router.post("/publicador/entrar", limitarLogin, async (req, res) => {
+    let sessao;
+    try {
+        sessao = await authService.entrarApp({ email: req.body?.email, senha: req.body?.senha });
+    } catch (erro) {
+        if (erro instanceof ErroHttp && erro.status === 401) registrarFalha(req);
+        throw erro;
+    }
+    registrarSucesso(req);
+    res.json({ sucesso: true, token: sessao.token, usuario: sessao.usuario });
+});
+
 // Link de convite aberto pelo cliente (ainda sem login).
 router.use("/contas/convites", convitesPublicosRoutes);
 
@@ -50,6 +67,7 @@ router.use("/clientes", ...somenteAdmin, clientesRoutes);
 router.use("/usuarios", ...somenteAdmin, usuariosRoutes);
 router.use("/perfis", ...somenteAdmin, perfisRoutes);
 router.use("/tarefas", ...somenteAdmin, tarefasRoutes);
+router.use("/publicador", ...somenteAdmin, publicadorRoutes);
 
 /* --------------------------- Rotas do cliente ---------------------------- */
 

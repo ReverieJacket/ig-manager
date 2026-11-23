@@ -21,7 +21,10 @@ const RAIZ_BACKEND = path.resolve(__dirname, "../..");
  * Pasta de dados gerados em tempo de execução (uploads, logs e sessão).
  * Fica fora do controle de versão (ver `.gitignore`).
  */
-const DIRETORIO_STORAGE = path.join(RAIZ_BACKEND, "storage");
+// O app Publicador instalado guarda os dados em AppData (IG_PASTA_DADOS).
+const DIRETORIO_STORAGE = process.env.IG_PASTA_DADOS
+    ? path.resolve(process.env.IG_PASTA_DADOS)
+    : path.join(RAIZ_BACKEND, "storage");
 
 const emProducao = process.env.NODE_ENV === "production";
 

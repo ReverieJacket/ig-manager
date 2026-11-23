@@ -5,6 +5,8 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("publicador", {
+    /** Login de administrador: `{ site, email, senha }`. */
+    entrar: (dados) => ipcRenderer.invoke("login:entrar", dados),
     /** Recebe o que mostrar: `{ modo, itens, ... }`. */
     aoReceber: (callback) => ipcRenderer.on("dados", (_evento, dados) => callback(dados)),
     publicarAgora: (id) => ipcRenderer.invoke("atrasada:publicar", id),
