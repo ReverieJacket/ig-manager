@@ -28,6 +28,12 @@
   input[type=datetime-local] { font: inherit; padding: 6px 8px; border: 1px solid #c8cdd9; border-radius: 8px; }
   footer { position: fixed; bottom: 0; left: 0; right: 0; padding: 12px 22px; background: #fff; border-top: 1px solid #e3e6ee; display: flex; justify-content: flex-end; gap: 10px; }
   .vazio { color: #666; text-align: center; padding: 30px 0; }
+  form.login { background: #fff; border: 1px solid #e3e6ee; border-radius: 10px; padding: 18px; display: grid; gap: 12px; }
+  form.login label { display: grid; gap: 5px; font-weight: 600; font-size: 13px; }
+  form.login input { font: inherit; font-weight: 400; padding: 9px 10px; border: 1px solid #c8cdd9; border-radius: 8px; }
+  .nota { color: #666; font-size: 12.5px; margin: 0; line-height: 1.5; }
+  .aviso { background: #fff7e6; border: 1px solid #f3d19c; color: #8a4b00; border-radius: 8px; padding: 9px 11px; font-size: 13px; }
+  details summary { cursor: pointer; color: #555; font-size: 13px; }
 </style>
 </head>
 <body>
@@ -93,6 +99,47 @@
   window.publicador.aoReceber((dados) => {
     const lista = $("lista"), rodape = $("rodape");
     lista.innerHTML = ""; rodape.innerHTML = "";
+
+    if (dados.modo === "login") {
+      $("cabecalho").className = "info";
+      $("titulo").textContent = "Entrar no IG Manager Publicador";
+      $("descricao").textContent =
+        "Use o seu e-mail e senha de administrador do IG Manager. O login fica guardado neste computador, " +
+        "criptografado pelo Windows; a senha não é guardada.";
+      const form = document.createElement("form");
+      form.className = "login";
+      form.innerHTML = `
+        <div class="aviso" id="aviso" hidden></div>
+        <label>E-mail<input id="email" type="email" autocomplete="username" required></label>
+        <label>Senha<input id="senha" type="password" autocomplete="current-password" required></label>
+        <details><summary>Endereço do site</summary>
+          <label style="margin-top:8px">Site<input id="site" type="url" required></label>
+        </details>
+        <button type="submit" hidden></button>
+        <p class="nota">Só administradores podem usar o Publicador. Ele inicia junto com o Windows (dá para mudar no menu do ícone).</p>`;
+      lista.append(form);
+      $("email").value = dados.email || "";
+      $("site").value = dados.site || "";
+      if (dados.aviso) { $("aviso").hidden = false; $("aviso").textContent = dados.aviso; }
+      if (!dados.site) form.querySelector("details").open = true;
+      const entrar = botao("Entrar", "primario", async () => {
+        if (!form.reportValidity()) return;
+        entrar.disabled = true;
+        $("aviso").hidden = true;
+        const r = await window.publicador.entrar({ site: $("site").value, email: $("email").value, senha: $("senha").value });
+        entrar.disabled = false;
+        $("senha").value = "";
+        if (!r.sucesso) { $("aviso").hidden = false; $("aviso").textContent = r.mensagem; return; }
+        $("titulo").textContent = "Pronto ✓";
+        $("descricao").textContent = r.mensagem + " Esta janela fecha sozinha.";
+        form.remove(); rodape.innerHTML = "";
+        setTimeout(() => window.publicador.fechar(), 2500);
+      });
+      form.addEventListener("submit", (e) => { e.preventDefault(); entrar.click(); });
+      rodape.append(botao("Agora não", "", () => window.publicador.fechar()), entrar);
+      setTimeout(() => (dados.email ? $("senha") : $("email")).focus(), 50);
+      return;
+    }
 
     if (dados.modo === "atrasadas") {
       $("cabecalho").className = "alerta";

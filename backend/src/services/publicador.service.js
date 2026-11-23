@@ -7,7 +7,6 @@
  */
 const { criarLogger } = require("../lib/logger");
 const { formatarErro } = require("../lib/erros");
-const { filaAutomacao } = require("../lib/fila");
 const { caminhoLocal } = require("../lib/imagens");
 const publicacoesRepository = require("../repositories/publicacoes.repository");
 const contasService = require("./contas.service");
@@ -70,9 +69,53 @@ async function guardarCodigoPost(id, codigo) {
     }
 }
 
+/** Só a automação (sem banco): ver `publicador/automacao.js`. */
+function executarAutomacao(dados) {
+    return require("../publicador/automacao").publicar(dados);
+}
+
 /**
- * Executa a publicação: valida imagem e conta, aciona a automação e
- * grava o status final (`publicada` ou `erro`).
+ * Grava no banco o resultado de uma publicação (lado do servidor).
+ *
+ * @param {number} id - Publicação.
+ * @param {{id: number, sessao_expirada_em?: string}|null} conta
+ * @param {{sucesso: boolean, incerto?: boolean, mensagem?: string,
+ *          codigoPost?: string, sessaoInvalida?: boolean}} resultado
+ * @returns {Promise<ResultadoExecucao>}
+ */
+async function registrarResultado(id, conta, resultado) {
+    if (resultado.sucesso) {
+        if (conta?.sessao_expirada_em) {
+            await contasRepository.limparSessaoExpirada(conta.id).catch(() => {});
+        }
+
+        await publicacoesRepository.atualizar(id, { status: STATUS.PUBLICADA, erro: null });
+        await guardarCodigoPost(id, resultado.codigoPost);
+
+        log.info(`Publicação ${id} concluída.`);
+        return { sucesso: true, id };
+    }
+
+    const mensagem = resultado.incerto
+        ? `Resultado incerto: ${resultado.mensagem}`
+        : resultado.mensagem || "A automação não confirmou a publicação.";
+
+    // O Instagram pediu login: o perfil passa a "Sessão expirada" até ser
+    // reconectado (aparece em Clientes, Criar e no aviso de Postagens).
+    if (resultado.sessaoInvalida && conta) {
+        await contasRepository.marcarSessaoExpirada(conta.id, resultado.mensagem).catch((erro) => {
+            log.aviso(`Não foi possível marcar a sessão expirada da conta ${conta.id}`, formatarErro(erro));
+        });
+    }
+
+    await registrarErro(id, mensagem);
+
+    return { sucesso: false, id, resultadoIncerto: Boolean(resultado.incerto), mensagem };
+}
+
+/**
+ * Executa a publicação neste mesmo processo (banco + automação): valida
+ * imagem e conta, aciona a automação e grava o status final.
  *
  * Nunca lança exceção; falhas retornam `sucesso: false`.
  *
@@ -85,81 +128,22 @@ async function executarPublicacao(publicacao) {
 
     log.info(`Iniciando publicação ${id}`);
 
+    let conta = null;
     try {
-        await publicacoesRepository.atualizar(id, {
-            status: STATUS.PUBLICANDO,
-            erro: null
-        });
+        await publicacoesRepository.atualizar(id, { status: STATUS.PUBLICANDO, erro: null });
 
         // Do disco; se a imagem foi enviada pelo site na Vercel, baixa do
         // Supabase Storage para este computador.
         const caminhoImagem = await caminhoLocal(publicacao.imagem);
 
-        const conta = await contasService.buscarContaAtiva(publicacao.conta_id);
+        conta = await contasService.buscarContaAtiva(publicacao.conta_id);
+        if (!conta) throw new Error("A conta vinculada não existe ou está inativa.");
 
-        if (!conta) {
-            throw new Error("A conta vinculada não existe ou está inativa.");
-        }
-
-        log.info(`Conta selecionada para publicação ${id}`, {
-            id: conta.id,
-            username: conta.username
+        const resultado = await executarAutomacao({
+            id, caminhoImagem, texto: publicacao.texto, mimetype: publicacao.mimetype, conta
         });
 
-        // Cada conta utiliza um arquivo de sessão isolado, identificado pelo ID.
-        // Um navegador por vez: espera se outra automação estiver rodando.
-        const { publicarNoInstagram } = require("../automacao/instagram/publicar");
-        const resultado = await filaAutomacao.executar(() =>
-            publicarNoInstagram(
-                caminhoImagem,
-                publicacao.texto,
-                publicacao.mimetype || undefined,
-                Number(conta.id),
-                conta.username
-            )
-        );
-
-        log.info(`Resultado da automação da publicação ${id}`, resultado);
-
-        if (resultado.sucesso) {
-            if (conta.sessao_expirada_em) {
-                await contasRepository.limparSessaoExpirada(conta.id).catch(() => {});
-            }
-
-            await publicacoesRepository.atualizar(id, {
-                status: STATUS.PUBLICADA,
-                erro: null
-            });
-
-            await guardarCodigoPost(id, resultado.codigoPost);
-
-            log.info(`Publicação ${id} concluída.`);
-            return { sucesso: true, id };
-        }
-
-        const mensagem = resultado.incerto
-            ? `Resultado incerto: ${resultado.mensagem}`
-            : resultado.mensagem;
-
-        // O Instagram pediu login: o perfil passa a "Sessão expirada" até ser
-        // reconectado (aparece em Clientes, Criar e no aviso de Postagens).
-        if (resultado.sessaoInvalida) {
-            await contasRepository.marcarSessaoExpirada(conta.id, resultado.mensagem).catch((erro) => {
-                log.aviso(`Não foi possível marcar a sessão expirada da conta ${conta.id}`, formatarErro(erro));
-            });
-        }
-
-        await publicacoesRepository.atualizar(id, {
-            status: STATUS.ERRO,
-            erro: mensagem
-        });
-
-        return {
-            sucesso: false,
-            id,
-            resultadoIncerto: Boolean(resultado.incerto),
-            mensagem
-        };
+        return await registrarResultado(id, conta, resultado);
     } catch (erro) {
         const mensagem = formatarErro(erro);
 
@@ -170,4 +154,4 @@ async function executarPublicacao(publicacao) {
     }
 }
 
-module.exports = { executarPublicacao };
+module.exports = { executarPublicacao, executarAutomacao, registrarResultado };

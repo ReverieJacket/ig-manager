@@ -112,6 +112,38 @@ async function entrar({ email, senha, manterConectado }) {
     return { usuario: usuarioPublico(usuario), ...emitirSessao(usuario, manterConectado) };
 }
 
+/** Validade do login do app Publicador (trocar a senha encerra antes). */
+const DURACAO_APP_MS = 180 * 24 * 60 * 60 * 1000;
+
+/**
+ * Login do app IG Manager Publicador: só administrador com senha
+ * definitiva. Devolve um token longo, guardado criptografado pelo app.
+ *
+ * @param {{email: string, senha: string}} dados
+ * @returns {Promise<{usuario: object, token: string}>}
+ * @throws {ErroHttp} 400, 401 ou 403 (não é administrador / senha temporária).
+ */
+async function entrarApp({ email, senha }) {
+    const { usuario } = await entrar({ email, senha, manterConectado: true });
+
+    if (usuario.perfil !== PERFIS.ADMIN) {
+        throw new ErroHttp(403, "O Publicador é só para administradores.");
+    }
+    if (usuario.senhaTemporaria) {
+        throw new ErroHttp(403, "Crie a sua senha no site antes de entrar no Publicador.");
+    }
+
+    const registro = await usuariosRepository.buscarPorId(usuario.id);
+
+    return {
+        usuario,
+        token: tokens.assinar(
+            { sub: registro.id, perfil: registro.perfil, v: versaoDe(registro), app: "publicador" },
+            DURACAO_APP_MS
+        )
+    };
+}
+
 /**
  * Lê a sessão a partir do token. Relê o usuário no banco a cada chamada,
  * para que desativar alguém ou trocar a senha tenha efeito imediato.
@@ -190,6 +222,7 @@ async function atualizarNome(usuarioId, nome) {
 module.exports = {
     PERFIS,
     entrar,
+    entrarApp,
     lerSessao,
     trocarSenha,
     atualizarNome,

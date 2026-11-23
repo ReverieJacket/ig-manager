@@ -33,7 +33,8 @@ function criarApp() {
             credentials: true
         })
     );
-    app.use(express.json());
+    // 4 MB: a coleta de comentários enviada pelo app Publicador pode ser grande.
+    app.use(express.json({ limit: "4mb" }));
     app.use(express.urlencoded({ extended: true }));
 
     // Imagens das postagens, para o frontend exibir as miniaturas.

@@ -4,11 +4,65 @@
   "version": "1.0.0",
   "private": true,
   "description": "Publica no Instagram as postagens do IG Manager a partir do computador do administrador",
+  "author": "IG Manager",
   "main": "main.js",
+  "igManager": {
+    "siteUrl": "https://ig-manager-inky.vercel.app"
+  },
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "preparar": "node scripts/copiar-backend.js",
+    "instalador": "npm run preparar && electron-builder --win --publish never"
+  },
+  "dependencies": {
+    "dotenv": "^18.0.4",
+    "pino": "^10.3.1",
+    "playwright": "^1.63.0"
   },
   "devDependencies": {
-    "electron": "^36.0.0"
+    "electron": "^36.0.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "br.ig-manager.publicador",
+    "productName": "IG Manager Publicador",
+    "artifactName": "IG-Manager-Publicador-Setup-${version}.${ext}",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "janela.html",
+      "icone.png",
+      "icone-desligado.png",
+      "icone-grande.png",
+      "package.json",
+      "backend/src/**/*"
+    ],
+    "asarUnpack": [
+      "node_modules/playwright/**",
+      "node_modules/playwright-core/**"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "icone.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "IG Manager Publicador",
+      "runAfterFinish": true
+    }
   }
 }

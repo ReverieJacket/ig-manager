@@ -1,0 +1,48 @@
+name: Instalador do Publicador
+
+# Gera o instalador do Windows (IG Manager Publicador) e publica em Releases.
+# - Tag "publicador-v1.2.3": gera e cria a Release com o .exe.
+# - Botão "Run workflow" (aba Actions): só gera; o .exe fica em Artifacts.
+on:
+  push:
+    tags: ["publicador-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: publicador
+    env:
+      # O app usa o Edge do Windows: não precisa baixar navegadores.
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+      # Sem certificado de assinatura de código.
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Instalar dependências
+        run: npm install
+      - name: Gerar o instalador
+        run: npm run instalador
+      - name: Guardar o instalador (Artifacts)
+        uses: actions/upload-artifact@v4
+        with:
+          name: IG-Manager-Publicador-Setup
+          path: publicador/dist/*.exe
+      - name: Publicar na Release
+        if: startsWith(github.ref, 'refs/tags/publicador-v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" dist/*.exe \
+            --title "IG Manager Publicador ${GITHUB_REF_NAME#publicador-v}" \
+            --notes "Instalador do Windows. Baixe o arquivo .exe abaixo, abra e siga os passos; na primeira vez, entre com o e-mail e a senha de administrador do IG Manager."

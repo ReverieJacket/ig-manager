@@ -1,13 +1,18 @@
 /**
  * Publicador: o "trabalhador" que fala com o Instagram.
  *
- * Roda no computador do administrador (app Publicador, ou dentro do
- * backend no modo "completo"). Em vez de timers, consulta o banco:
+ * Roda no computador do administrador (app Publicador, `npm run
+ * publicador` ou dentro do backend no modo "completo"). Em vez de timers,
+ * consulta o servidor:
  * - a cada 15 s: publica as agendadas cujo horário chegou;
  * - a cada 4 s: executa os pedidos do site (conectar, desconectar,
  *   coletar comentários);
  * - a cada 30 s: grava o "sinal de vida" que o site usa para mostrar se o
  *   Publicador está ligado.
+ *
+ * O acesso aos dados é uma "porta": direto no banco (`porta-local`) ou pelo
+ * site com o login do administrador (`porta-remota`, app instalado). As
+ * regras são as mesmas (`services/publicador-servidor.service.js`).
  *
  * Horário perdido: o que venceu enquanto o Publicador estava desligado (ou
  * o computador dormindo) NÃO sai sozinho. Aprovado (ou sem aprovação) vira
@@ -21,27 +26,24 @@ const os = require("os");
 const { config } = require("../config/env");
 const { criarLogger } = require("../lib/logger");
 const { formatarErro } = require("../lib/erros");
-const publicacoesRepository = require("../repositories/publicacoes.repository");
-const contasRepository = require("../repositories/contas.repository");
-const tarefasRepository = require("../repositories/tarefas.repository");
-const publicadorRepository = require("../repositories/publicador.repository");
+const automacao = require("./automacao");
 
-const { STATUS, APROVACAO } = publicacoesRepository;
-const { TIPOS } = tarefasRepository;
 const log = criarLogger("Publicador");
 
-/** Margem para o horário "na hora": até 1 min antes de acordar ainda publica. */
-const TOLERANCIA_MS = 60 * 1000;
 /** Tempo máximo esperando o login de uma conexão. */
 const LIMITE_CONEXAO_MS = 10 * 60 * 1000;
 
-const MENSAGEM_PRAZO_ESGOTADO =
-    "Não publicada: o cliente não respondeu à aprovação até o horário.";
+const TIPOS = Object.freeze({
+    CONECTAR: "conectar",
+    DESCONECTAR: "desconectar",
+    COLETAR_COMENTARIOS: "coletar_comentarios"
+});
 
 const eventos = new EventEmitter();
 
 const estado = {
     ativo: false,
+    porta: null,
     /** Desde quando o Publicador está ligado sem interrupção (nem sono). */
     acordadoDesde: 0,
     ultimoCicloPublicacoes: 0,
@@ -52,69 +54,51 @@ const estado = {
     tarefasEmAndamento: new Set()
 };
 
+/** Sessão do login perdida (app instalado): avisa e não insiste. */
+function tratarErroGeral(erro, contexto) {
+    if (erro?.sessao) {
+        eventos.emit("sessaoPerdida", erro);
+        return;
+    }
+    log.erro(contexto, formatarErro(erro));
+}
+
 /* ------------------------------ Publicações ------------------------------ */
 
-/** Sem resposta até o horário: vira `recusada` (prazo esgotado). */
-async function marcarPrazoEsgotado(id) {
-    const atualizada = await publicacoesRepository.atualizarSeStatus(
-        id,
-        { status: STATUS.RECUSADA, erro: MENSAGEM_PRAZO_ESGOTADO },
-        [STATUS.AGENDADA]
-    );
-    if (atualizada) log.info(`Publicação ${id} não publicada: o cliente não respondeu até o horário.`);
-}
-
-/** Horário perdido com o Publicador desligado: vira `atrasada`. */
-async function marcarAtrasada(publicacao) {
-    const horario = new Date(publicacao.data_hora).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
-    const atualizada = await publicacoesRepository.atualizarSeStatus(
-        publicacao.id,
-        {
-            status: STATUS.ATRASADA,
-            erro: `Horário perdido: o Publicador estava desligado em ${horario}. Publique agora ou reagende.`
-        },
-        [STATUS.AGENDADA]
-    );
-    if (atualizada) log.aviso(`Publicação ${publicacao.id} ficou atrasada`, { horario: publicacao.data_hora });
-    return atualizada;
-}
-
 /**
- * Decide o que fazer com uma agendada vencida (relida do banco: o cliente
- * pode ter respondido há pouco).
+ * Uma agendada vencida: o servidor decide (prazo, atrasada ou publicar) e
+ * reserva; se for publicar, a automação roda aqui e o resultado volta.
  *
  * @returns {Promise<"publicada"|"atrasada"|"ignorada">}
  */
-async function tratarVencida(publicacao) {
-    const atual = await publicacoesRepository.buscarPorId(publicacao.id);
-    if (!atual || atual.status !== STATUS.AGENDADA) return "ignorada";
+async function tratarVencida(item) {
+    const porta = estado.porta;
+    const decisao = await porta.tratar(item.id, estado.acordadoDesde);
 
-    if (atual.aprovacao === APROVACAO.PENDENTE) {
-        await marcarPrazoEsgotado(atual.id);
-        return "ignorada";
+    if (decisao.acao === "atrasada") return "atrasada";
+    if (decisao.acao !== "publicar") return "ignorada";
+
+    const { publicacao, conta } = decisao;
+    let resultado;
+
+    try {
+        const caminhoImagem = await porta.baixarImagem(publicacao);
+        resultado = await automacao.publicar({
+            id: publicacao.id,
+            caminhoImagem,
+            texto: publicacao.texto,
+            mimetype: publicacao.mimetype,
+            conta
+        });
+    } catch (erro) {
+        if (erro?.sessao) throw erro;
+        resultado = { sucesso: false, mensagem: formatarErro(erro) };
     }
 
-    if (atual.aprovacao === APROVACAO.INDEFERIDA) return "ignorada";
+    const gravado = await porta.registrarResultado(publicacao.id, resultado);
+    const final = gravado && typeof gravado.sucesso === "boolean" ? gravado : { id: publicacao.id, ...resultado };
 
-    const venceuDormindo = new Date(atual.data_hora).getTime() < estado.acordadoDesde - TOLERANCIA_MS;
-
-    if (venceuDormindo) {
-        return (await marcarAtrasada(atual)) ? "atrasada" : "ignorada";
-    }
-
-    // Reserva: só um Publicador consegue passar de agendada para publicando.
-    const reservada = await publicacoesRepository.atualizarSeStatus(
-        atual.id,
-        { status: STATUS.PUBLICANDO, erro: null },
-        [STATUS.AGENDADA]
-    );
-    if (!reservada) return "ignorada";
-
-    // Carregado só aqui: o site (Vercel) nunca precisa do Playwright.
-    const { executarPublicacao } = require("../services/publicador.service");
-    const resultado = await executarPublicacao(reservada);
-
-    eventos.emit("publicacao", { id: reservada.id, ...resultado });
+    eventos.emit("publicacao", { id: publicacao.id, ...final });
 
     return "publicada";
 }
@@ -133,15 +117,16 @@ async function cicloPublicacoes() {
             estado.repetirPublicacoes = false;
             detectarSono();
 
-            const vencidas = await publicacoesRepository.listarVencidas(new Date().toISOString());
+            const vencidas = await estado.porta.vencidas();
             let atrasadas = 0;
 
-            for (const publicacao of vencidas) {
+            for (const item of vencidas) {
                 if (!estado.ativo) return;
                 try {
-                    if ((await tratarVencida(publicacao)) === "atrasada") atrasadas++;
+                    if ((await tratarVencida(item)) === "atrasada") atrasadas++;
                 } catch (erro) {
-                    log.erro(`Erro ao tratar a publicação ${publicacao.id}`, formatarErro(erro));
+                    if (erro?.sessao) throw erro;
+                    log.erro(`Erro ao tratar a publicação ${item.id}`, formatarErro(erro));
                 }
             }
 
@@ -149,7 +134,7 @@ async function cicloPublicacoes() {
             estado.ultimoCicloPublicacoes = Date.now();
         } while (estado.repetirPublicacoes && estado.ativo);
     } catch (erro) {
-        log.erro("Falha ao consultar as publicações agendadas", formatarErro(erro));
+        tratarErroGeral(erro, "Falha ao consultar as publicações agendadas");
     } finally {
         estado.publicando = false;
     }
@@ -173,49 +158,31 @@ function detectarSono() {
 /** Avisa quem estiver ouvindo (app Publicador) sobre as atrasadas. */
 async function avisarAtrasadas() {
     try {
-        const lista = await publicacoesRepository.listarPorStatus(STATUS.ATRASADA);
+        const lista = await estado.porta.atrasadas();
         if (lista.length > 0) eventos.emit("atrasadas", lista);
     } catch (erro) {
-        log.aviso("Não foi possível listar as publicações atrasadas", formatarErro(erro));
+        tratarErroGeral(erro, "Não foi possível listar as publicações atrasadas");
     }
-}
-
-/**
- * Publicações que ficaram "publicando" quando o Publicador fechou: não se
- * sabe se saíram, então viram erro (sem nova tentativa automática).
- */
-async function encerrarInterrompidas() {
-    const interrompidas = await publicacoesRepository.listarPorStatus(STATUS.PUBLICANDO);
-
-    for (const publicacao of interrompidas) {
-        await publicacoesRepository.atualizar(publicacao.id, {
-            status: STATUS.ERRO,
-            erro:
-                "Resultado incerto: o Publicador foi fechado durante a publicação. " +
-                "Confira no Instagram antes de publicar de novo."
-        }).catch((erro) => log.erro(`Não foi possível marcar a publicação ${publicacao.id}`, formatarErro(erro)));
-    }
-
-    return interrompidas.length;
 }
 
 /* -------------------------------- Tarefas -------------------------------- */
 
-/** Abre o Chromium para o login e espera terminar (até 10 min). */
-async function executarConexao(tarefa) {
+/** Abre o navegador para o login e espera terminar (até 10 min). */
+async function executarConexao(pedido) {
     const instagramAuth = require("../services/instagram-auth.service");
-    let atual = await instagramAuth.iniciar(tarefa.conta_id);
+    const contaId = pedido.tarefa.conta_id;
+    let atual = await instagramAuth.iniciar(contaId);
     const limite = Date.now() + LIMITE_CONEXAO_MS;
 
-    await tarefasRepository.informar(tarefa.id, atual.mensagem).catch(() => {});
+    await estado.porta.informarTarefa(pedido.tarefa.id, atual.mensagem).catch(() => {});
 
     while (["iniciando", "aguardando_login"].includes(atual.status)) {
         if (Date.now() > limite) {
-            await instagramAuth.desconectarProcesso(tarefa.conta_id);
+            await instagramAuth.desconectarProcesso(contaId);
             return { sucesso: false, mensagem: "Tempo esgotado: o login não foi concluído em 10 minutos." };
         }
         await new Promise((r) => setTimeout(r, 2500));
-        atual = await instagramAuth.consultar(tarefa.conta_id);
+        atual = await instagramAuth.consultar(contaId);
     }
 
     return {
@@ -225,8 +192,10 @@ async function executarConexao(tarefa) {
     };
 }
 
-async function executarTarefa(tarefa) {
-    if (tarefa.tipo === TIPOS.CONECTAR) return executarConexao(tarefa);
+async function executarTarefa(pedido) {
+    const { tarefa } = pedido;
+
+    if (tarefa.tipo === TIPOS.CONECTAR) return executarConexao(pedido);
 
     if (tarefa.tipo === TIPOS.DESCONECTAR) {
         const instagramAuth = require("../services/instagram-auth.service");
@@ -235,8 +204,12 @@ async function executarTarefa(tarefa) {
     }
 
     if (tarefa.tipo === TIPOS.COLETAR_COMENTARIOS) {
-        const comentariosService = require("../services/comentarios.service");
-        const resultado = await comentariosService.coletarComentarios(tarefa.publicacao_id);
+        const publicacao = pedido.publicacao;
+        if (!publicacao?.ig_codigo) {
+            return { sucesso: false, mensagem: "Esta publicação não tem o código do post no Instagram." };
+        }
+        const coleta = await automacao.coletarComentarios(publicacao);
+        const resultado = await estado.porta.salvarComentarios(publicacao.id, coleta);
         return { sucesso: true, mensagem: "Comentários atualizados.", resultado };
     }
 
@@ -252,25 +225,28 @@ async function cicloTarefas() {
     if (estado.lendoTarefas) return;
     estado.lendoTarefas = true;
 
+    const porta = estado.porta;
+
     try {
-        const pendentes = await tarefasRepository.listarPendentes();
+        const pendentes = await porta.tarefasPendentes();
 
         for (const pendente of pendentes) {
-            const tarefa = await tarefasRepository.pegar(pendente.id);
-            if (!tarefa) continue;
+            const pedido = await porta.pegarTarefa(pendente.id);
+            if (!pedido) continue;
 
+            const { tarefa } = pedido;
             estado.tarefasEmAndamento.add(tarefa.id);
             log.info(`Pedido ${tarefa.id}: ${tarefa.tipo}`, { conta: tarefa.conta_id, publicacao: tarefa.publicacao_id });
 
-            executarTarefa(tarefa)
+            executarTarefa(pedido)
                 .catch((erro) => ({ sucesso: false, mensagem: formatarErro(erro) }))
-                .then((fim) => tarefasRepository.concluir(tarefa.id, fim).then(() => fim))
+                .then((fim) => porta.concluirTarefa(tarefa.id, fim).then(() => fim))
                 .then((fim) => eventos.emit("tarefa", { ...tarefa, ...fim }))
-                .catch((erro) => log.erro(`Não foi possível concluir o pedido ${tarefa.id}`, formatarErro(erro)))
+                .catch((erro) => tratarErroGeral(erro, `Não foi possível concluir o pedido ${tarefa.id}`))
                 .finally(() => estado.tarefasEmAndamento.delete(tarefa.id));
         }
     } catch (erro) {
-        log.erro("Falha ao consultar os pedidos do site", formatarErro(erro));
+        tratarErroGeral(erro, "Falha ao consultar os pedidos do site");
     } finally {
         estado.lendoTarefas = false;
     }
@@ -279,12 +255,12 @@ async function cicloTarefas() {
 /* -------------------------------- Sessões -------------------------------- */
 
 /**
- * Informa ao banco quais perfis têm sessão salva NESTE computador (o site
- * na Vercel não vê o disco). Sem a migração 011, apenas avisa.
+ * Informa ao servidor quais perfis têm sessão salva NESTE computador (o
+ * site não vê o disco). Sem a migração 011, apenas avisa.
  */
 async function sincronizarSessoes() {
     const { obterArquivoSessao } = require("../automacao/instagram/sessao");
-    const contas = await contasRepository.listarAtivas();
+    const contas = await estado.porta.contasAtivas();
 
     for (const conta of contas) {
         let existe = false;
@@ -297,47 +273,15 @@ async function sincronizarSessoes() {
             existe = false;
         }
 
-        const marcada = Boolean(conta.sessao_salva_em);
-        if (existe === marcada) continue;
+        if (existe === Boolean(conta.sessao_salva_em)) continue;
 
         try {
-            await contasRepository.definirSessaoSalva(conta.id, existe ? quando : null);
+            await estado.porta.definirSessao(conta.id, existe ? quando : null);
         } catch (erro) {
+            if (erro?.sessao) throw erro;
             log.aviso("Não foi possível sincronizar as sessões (execute a migração 011)", formatarErro(erro));
             return;
         }
-    }
-}
-
-/* -------------------------------- Imagens -------------------------------- */
-
-/**
- * Postagens antigas guardaram a imagem só neste computador: envia ao
- * Supabase Storage para as miniaturas aparecerem no site da Vercel.
- * Sem a migração 011 (bucket), apenas avisa.
- */
-async function enviarImagensAntigas() {
-    const { enviarLocaisAoStorage } = require("../lib/imagens");
-    const nomes = [];
-    for (const status of Object.values(STATUS)) {
-        const lista = await publicacoesRepository.listarPorStatus(status).catch(() => []);
-        nomes.push(...lista.map((p) => p.imagem));
-    }
-    try {
-        const novas = await enviarLocaisAoStorage(nomes);
-        if (novas > 0) log.info(`${novas} imagem(ns) antiga(s) enviada(s) ao Supabase Storage`);
-    } catch (erro) {
-        log.aviso("Não foi possível enviar as imagens antigas ao Storage (execute a migração 011)", formatarErro(erro));
-    }
-}
-
-/* ------------------------------ Sinal de vida ---------------------------- */
-
-async function sinalizar(extra) {
-    try {
-        await publicadorRepository.sinalizar(extra);
-    } catch (erro) {
-        log.aviso("Não foi possível gravar o sinal do Publicador (execute a migração 011)", formatarErro(erro));
     }
 }
 
@@ -347,29 +291,36 @@ async function sinalizar(extra) {
  * Liga o Publicador. Antes de publicar qualquer coisa, organiza o que
  * ficou para trás enquanto estava desligado.
  *
- * @param {{versao?: string}} [opcoes]
+ * @param {{versao?: string, porta?: object}} [opcoes] - Sem `porta`: banco direto.
  * @returns {Promise<{atrasadas: object[], interrompidas: number}>}
  */
-async function iniciar({ versao = "" } = {}) {
+async function iniciar({ versao = "", porta } = {}) {
     if (estado.ativo) return { atrasadas: [], interrompidas: 0 };
+
+    estado.porta = porta || require("./porta-local").criarPortaLocal();
+
+    // App instalado: a conexão de perfis também conversa pelo site.
+    if (estado.porta.tipo === "remota") {
+        require("../services/instagram-auth.service").configurar({
+            buscarConta: (id) => estado.porta.contaParaConectar(id),
+            sessaoSalva: (id) => estado.porta.definirSessao(id, new Date().toISOString()),
+            sessaoRemovida: (id) => estado.porta.definirSessao(id, null)
+        });
+    }
+
+    // Antes de ligar: se o login não vale, nada é marcado como ativo.
+    const inicio = await estado.porta.iniciar({ maquina: os.hostname(), versao });
 
     estado.ativo = true;
     estado.acordadoDesde = Date.now();
     estado.ultimoCicloPublicacoes = 0;
 
-    await sinalizar({ iniciado_em: new Date().toISOString(), maquina: os.hostname(), versao });
-
-    const interrompidas = await encerrarInterrompidas().catch((erro) => {
-        log.erro("Não foi possível conferir publicações interrompidas", formatarErro(erro));
-        return 0;
-    });
-    await tarefasRepository.encerrarInterrompidas().catch(() => 0);
-    await sincronizarSessoes().catch((erro) => log.aviso("Falha ao sincronizar sessões", formatarErro(erro)));
+    await sincronizarSessoes().catch((erro) => tratarErroGeral(erro, "Falha ao sincronizar sessões"));
 
     // Primeira rodada: o que venceu com o Publicador desligado vira atrasada.
     await cicloPublicacoes();
 
-    const atrasadas = await publicacoesRepository.listarPorStatus(STATUS.ATRASADA).catch(() => []);
+    const atrasadas = await estado.porta.atrasadas().catch(() => []);
 
     const repetir = (fn, ms) => {
         const t = setInterval(() => { if (estado.ativo) fn(); }, ms);
@@ -377,26 +328,48 @@ async function iniciar({ versao = "" } = {}) {
     };
     repetir(cicloPublicacoes, config.publicador.intervaloPublicacoesMs);
     repetir(cicloTarefas, config.publicador.intervaloTarefasMs);
-    repetir(() => sinalizar(), config.publicador.intervaloSinalMs);
-    repetir(() => sincronizarSessoes().catch(() => {}), 5 * 60 * 1000);
+    repetir(() => estado.porta.sinalizar().catch((e) => tratarErroGeral(e, "Falha ao enviar o sinal")), config.publicador.intervaloSinalMs);
+    repetir(() => sincronizarSessoes().catch((e) => tratarErroGeral(e, "Falha ao sincronizar sessões")), 5 * 60 * 1000);
 
     cicloTarefas();
-    // Em segundo plano: não atrasa a primeira rodada.
-    enviarImagensAntigas();
 
+    // Envia ao Storage as imagens antigas deste computador (só com banco direto).
+    if (estado.porta.tipo === "local") enviarImagensAntigas();
+
+    const interrompidas = inicio?.interrompidas || 0;
     log.info("Publicador ligado", { atrasadas: atrasadas.length, interrompidas });
     if (atrasadas.length > 0) eventos.emit("atrasadas", atrasadas);
 
     return { atrasadas, interrompidas };
 }
 
+/**
+ * Postagens antigas guardaram a imagem só neste computador: envia ao
+ * Supabase Storage para as miniaturas aparecerem no site da Vercel.
+ */
+async function enviarImagensAntigas() {
+    try {
+        const publicacoesRepository = require("../repositories/publicacoes.repository");
+        const { enviarLocaisAoStorage } = require("../lib/imagens");
+        const nomes = [];
+        for (const status of Object.values(publicacoesRepository.STATUS)) {
+            const lista = await publicacoesRepository.listarPorStatus(status).catch(() => []);
+            nomes.push(...lista.map((p) => p.imagem));
+        }
+        const novas = await enviarLocaisAoStorage(nomes);
+        if (novas > 0) log.info(`${novas} imagem(ns) antiga(s) enviada(s) ao Supabase Storage`);
+    } catch (erro) {
+        log.aviso("Não foi possível enviar as imagens antigas ao Storage (execute a migração 011)", formatarErro(erro));
+    }
+}
+
 /** Desliga (fechamento normal): o site mostra "desligado" na hora. */
-async function parar() {
+async function parar({ avisarServidor = true } = {}) {
     if (!estado.ativo) return;
     estado.ativo = false;
     estado.timers.forEach(clearInterval);
     estado.timers = [];
-    await publicadorRepository.desligar().catch(() => {});
+    if (avisarServidor) await estado.porta.desligar().catch(() => {});
     log.info("Publicador desligado");
 }
 
@@ -414,8 +387,19 @@ function voltouDoSono() {
 
 /** Agendadas que ainda vão sair (alerta antes de desligar). */
 async function proximasAgendadas() {
-    const lista = await publicacoesRepository.listarProximas(new Date().toISOString());
-    return lista.filter((p) => p.aprovacao !== APROVACAO.INDEFERIDA);
+    return estado.porta ? estado.porta.proximas() : [];
+}
+
+/** Atrasadas agora (janela do app). */
+async function listarAtrasadas() {
+    return estado.porta ? estado.porta.atrasadas() : [];
+}
+
+/** Publicar agora / reagendar uma atrasada. */
+async function retomar(id, dados) {
+    const r = await estado.porta.retomar(id, dados);
+    acordar();
+    return r;
 }
 
 function estaAtivo() {
@@ -434,8 +418,10 @@ module.exports = {
     acordar,
     voltouDoSono,
     proximasAgendadas,
+    listarAtrasadas,
+    retomar,
     estaAtivo,
     ocupado,
     // Exportados para testes.
-    _interno: { tratarVencida, cicloPublicacoes, cicloTarefas, sincronizarSessoes, estado, MENSAGEM_PRAZO_ESGOTADO }
+    _interno: { tratarVencida, cicloPublicacoes, cicloTarefas, sincronizarSessoes, estado }
 };
