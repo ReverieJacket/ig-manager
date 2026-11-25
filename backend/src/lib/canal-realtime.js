@@ -56,7 +56,9 @@ class CanalRealtime {
                 event: "phx_join",
                 payload: {
                     config: { broadcast: { ack: false, self: false }, presence: { key: "" }, private: false },
-                    access_token: this.chave
+                    // Chave antiga (JWT "eyJ..."): vai também como token. A nova
+                    // (sb_publishable_...) vale só pelo parâmetro apikey da conexão.
+                    ...(String(this.chave).startsWith("eyJ") ? { access_token: this.chave } : {})
                 },
                 ref: String(++this.ref),
                 join_ref: "1"
