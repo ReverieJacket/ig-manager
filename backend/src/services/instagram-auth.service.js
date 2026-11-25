@@ -58,12 +58,18 @@ async function avisar(fn, id) {
   }
 }
 
-async function iniciar(contaId) {
+/**
+ * @param {number} contaId
+ * @param {{remoto?: {url: string, chave: string, canal: string}}} [opcoes] -
+ *   Com `remoto`, o navegador abre escondido e a tela vai para o site de quem
+ *   clicou em "Conectar" (automacao/instagram/tela-remota).
+ */
+async function iniciar(contaId, { remoto = null } = {}) {
   const id = Number(contaId);
   if (!Number.isSafeInteger(id) || id <= 0) {
     throw new ErroHttp(400, "ID da conta inválido.");
   }
-  if (!config.conexaoNoServidor) {
+  if (!config.conexaoNoServidor && !remoto) {
     throw new ErroHttp(
       409,
       "Neste servidor não há tela para abrir o Instagram. Conecte o perfil no seu computador " +
@@ -75,15 +81,34 @@ async function iniciar(contaId) {
   if (processos.has(id)) return estado(id);
 
   const { chromium } = require("playwright");
-  const p = { contaId: id, username: conta.username, status: "iniciando", mensagem: "Abrindo navegador", browser: null, context: null, page: null, timer: null };
+  const p = { contaId: id, username: conta.username, status: "iniciando", mensagem: "Abrindo navegador", browser: null, context: null, page: null, timer: null, tela: null };
   processos.set(id, p);
   try {
-    p.browser = await chromium.launch({ headless: false, channel: process.env.IG_NAVEGADOR_CANAL || undefined });
-    p.context = await p.browser.newContext({ viewport: { width: 1366, height: 768 }, locale: "pt-BR" });
-    p.page = await p.context.newPage();
-    await p.page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 60000 });
+    p.browser = await chromium.launch({ headless: Boolean(remoto), channel: process.env.IG_NAVEGADOR_CANAL || undefined });
+    if (remoto) {
+      const telaRemota = require("../automacao/instagram/tela-remota");
+      p.context = await p.browser.newContext({ viewport: telaRemota.VIEWPORT, locale: "pt-BR" });
+      p.page = await p.context.newPage();
+      p.tela = await telaRemota.iniciar(p.page, remoto, {
+        log,
+        aoCancelar: () => {
+          p.status = "cancelado";
+          p.mensagem = "Conexão cancelada por quem estava conectando.";
+          p.tela?.informar(p.status, p.mensagem);
+          encerrar(p).catch(() => {});
+        }
+      });
+      await p.page.goto(telaRemota.INICIO, { waitUntil: "domcontentloaded", timeout: 60000 });
+    } else {
+      p.context = await p.browser.newContext({ viewport: { width: 1366, height: 768 }, locale: "pt-BR" });
+      p.page = await p.context.newPage();
+      await p.page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 60000 });
+    }
     p.status = "aguardando_login";
-    p.mensagem = `Entre na conta @${conta.username} no navegador aberto. A sessão será salva automaticamente.`;
+    p.mensagem = remoto
+      ? `Entre na conta @${conta.username} na tela do Instagram. A sessão será salva automaticamente.`
+      : `Entre na conta @${conta.username} no navegador aberto. A sessão será salva automaticamente.`;
+    p.tela?.informar(p.status, p.mensagem);
     // Verifica periodicamente, sem exigir ENTER no terminal.
     p.timer = setInterval(() => concluirSeAutenticado(p).catch(() => {}), 2500);
     return estado(id);
@@ -110,6 +135,7 @@ async function concluirSeAutenticado(p) {
   // Sessão nova: o perfil deixa de aparecer como "Sessão expirada".
   await avisar(porta().sessaoSalva, p.contaId);
   p.status = "conectado"; p.mensagem = "Sessão salva. Confira se o perfil aberto corresponde à conta cadastrada.";
+  p.tela?.informar(p.status, "Pronto! O perfil foi conectado.");
   await encerrar(p);
 }
 
@@ -146,6 +172,8 @@ async function consultar(id) {
 
 async function encerrar(p) {
   if (p.timer) clearInterval(p.timer);
+  if (p.tela) await p.tela.parar().catch(() => {});
+  p.tela = null;
   if (p.browser) await p.browser.close().catch(() => {});
   p.timer = null; p.browser = null;
 }
@@ -153,7 +181,10 @@ async function encerrar(p) {
 /** Fecha só o navegador de uma conexão em andamento (tempo esgotado). */
 async function desconectarProcesso(id) {
   const n = Number(id), p = processos.get(n);
-  if (p) { await encerrar(p); processos.delete(n); }
+  if (p) {
+    p.tela?.informar("cancelado", "Tempo esgotado: o login não foi concluído.");
+    await encerrar(p); processos.delete(n);
+  }
 }
 
 async function desconectar(id) {

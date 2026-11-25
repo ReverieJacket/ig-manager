@@ -230,10 +230,17 @@ cliente) e no menu ⋯ de Postagens, com **Publicar agora** (exige o perfil cone
 O administrador também pode **cancelar** uma agendada (menu ⋯ em Postagens): ela vira
 *Cancelada*, fica no histórico e o cliente vê "Cancelada pela equipe".
 
-**Conexão pelo cliente:** com `CONEXAO_PELO_CLIENTE=true` (padrão) o cliente vê o
-botão *Conectar* em *Meus perfis*. O Chromium abre **no computador do backend**, então
-isso só faz sentido com tudo na mesma máquina; no site da Vercel o botão fica oculto
-(o Chromium abriria no computador do Publicador) até existir o navegador remoto.
+**Conexão pelo cliente:** com tudo na mesma máquina, `CONEXAO_PELO_CLIENTE=true`
+(padrão) mostra o botão *Conectar* em *Meus perfis* e o Chromium abre ali mesmo.
+
+**Tela remota (site na Vercel):** com `SUPABASE_ANON_KEY` configurada, *Conectar*
+(do cliente em *Meus perfis* ou do administrador em *Clientes*) funciona de qualquer
+aparelho: o Publicador abre o Instagram num navegador escondido e transmite a tela
+pelo Supabase Realtime, num canal secreto por pedido; quem clicou toca, digita e
+confirma o código pelo próprio site. A senha vai direto para o Instagram e não é
+guardada; ao terminar, o Publicador salva só a sessão. O navegador escondido fica
+preso ao Instagram/Facebook. Código: `automacao/instagram/tela-remota.js`,
+`lib/canal-realtime.js`, `lib/tela-remota.js` e `frontend/src/components/perfis/TelaRemota.vue`.
 Desconectar continua só com o administrador.
 
 **Sessão expirada:** se, ao publicar, o Instagram pedir login ou verificação de

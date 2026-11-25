@@ -232,6 +232,10 @@ async function pegarTarefa(id) {
         const conta = await contasRepository.buscarPorId(tarefa.conta_id).catch(() => null);
         if (conta) extra.conta = { id: conta.id, username: conta.username, ativo: conta.ativo };
     }
+    if (tarefa.tipo === TIPOS.CONECTAR) {
+        const remoto = require("../lib/tela-remota").dadosDoCanal(tarefa.id);
+        if (remoto) extra.remoto = remoto;
+    }
     if (tarefa.tipo === TIPOS.COLETAR_COMENTARIOS && tarefa.publicacao_id) {
         const p = await publicacoesRepository.buscarPorId(tarefa.publicacao_id);
         if (p) extra.publicacao = { id: p.id, conta_id: p.conta_id, ig_codigo: p.ig_codigo, status: p.status };

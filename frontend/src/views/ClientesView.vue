@@ -138,11 +138,11 @@
                     v-if="perfil.status !== 'conectado' && !conexaoPorArquivo"
                     class="botao botao--primario botao--pequeno"
                     type="button"
-                    :disabled="emAndamento(perfil.id) || !detalhe.cliente.ativo"
-                    :title="viaPublicador ? 'O Chromium abre no computador do Publicador para o login no Instagram' : ''"
-                    @click="conectar(perfil)"
+                    :disabled="(emAndamento(perfil.id) && !conexao[perfil.id]?.remoto) || !detalhe.cliente.ativo"
+                    :title="viaPublicador && !telaRemotaDisponivel ? 'O Chromium abre no computador do Publicador para o login no Instagram' : ''"
+                    @click="emAndamento(perfil.id) ? abrirTela(perfil) : conectar(perfil)"
                   >
-                    {{ emAndamento(perfil.id) ? "Aguardando login..." : perfil.status === "expirada" ? "Reconectar" : "Conectar" }}
+                    {{ emAndamento(perfil.id) ? (conexao[perfil.id]?.remoto ? "Abrir tela" : "Aguardando login...") : perfil.status === "expirada" ? "Reconectar" : "Conectar" }}
                   </button>
                   <button
                     v-else-if="perfil.status !== 'conectado'"
@@ -246,6 +246,15 @@
         </button>
       </template>
     </ModalBase>
+
+    <!-- Tela remota: o Instagram aberto no Publicador, para o login -->
+    <TelaRemota
+      v-if="telaAberta"
+      :remoto="telaAberta.remoto"
+      :username="telaAberta.username"
+      @concluido="aoConcluirTela"
+      @fechar="telaAberta = null"
+    />
 
     <!-- Enviar arquivo de sessão (servidor sem tela) -->
     <ModalEnviarSessao
@@ -440,6 +449,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import MenuAcoes from "../components/comum/MenuAcoes.vue";
 import ModalBase from "../components/comum/ModalBase.vue";
 import ModalEnviarSessao from "../components/perfis/ModalEnviarSessao.vue";
+import TelaRemota from "../components/perfis/TelaRemota.vue";
 import {
   adicionarUsuario,
   atualizarCliente,
@@ -948,9 +958,26 @@ function pararAcompanhamento(id) {
   intervalos.delete(id);
 }
 
+/* Tela remota: o Instagram aberto no Publicador aparece aqui. */
+const telaAberta = ref(null);
+const telaRemotaDisponivel = computed(() => Object.values(conexao.value).some((c) => c?.remoto));
+
+function abrirTela(perfil) {
+  const remoto = conexao.value[perfil.id]?.remoto;
+  if (remoto) telaAberta.value = { contaId: perfil.id, username: perfil.username, remoto };
+}
+
+function aoConcluirTela() {
+  setTimeout(() => {
+    telaAberta.value = null;
+    recarregar();
+  }, 1500);
+}
+
 async function conectar(perfil) {
   try {
     conexao.value[perfil.id] = await conectarInstagram(perfil.id);
+    if (conexao.value[perfil.id]?.remoto) abrirTela(perfil);
   } catch (e) {
     conexao.value[perfil.id] = { status: "erro", mensagem: e.message };
     return;
@@ -965,6 +992,7 @@ async function conectar(perfil) {
         conexao.value[perfil.id] = estado;
         if (!EM_ANDAMENTO.includes(estado.status)) {
           pararAcompanhamento(perfil.id);
+          if (estado.status !== "conectado" && telaAberta.value?.contaId === perfil.id) telaAberta.value = null;
           await recarregar();
         }
       } catch (e) {

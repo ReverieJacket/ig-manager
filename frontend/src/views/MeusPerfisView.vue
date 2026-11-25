@@ -45,15 +45,15 @@
                 v-if="conta.podeConectar && seloDe(conta).classe !== 'selo--sucesso'"
                 class="botao botao--primario botao--pequeno"
                 type="button"
-                :disabled="emAndamento(conta.id)"
-                @click="conectar(conta)"
+                :disabled="emAndamento(conta.id) && !conexao[conta.id]?.remoto"
+                @click="emAndamento(conta.id) ? abrirTela(conta) : conectar(conta)"
               >
-                {{ emAndamento(conta.id) ? "Aguardando login..." : conta.status === "expirada" ? "Reconectar" : "Conectar" }}
+                {{ emAndamento(conta.id) ? (conexao[conta.id]?.remoto ? "Abrir tela" : "Aguardando login...") : conta.status === "expirada" ? "Reconectar" : "Conectar" }}
               </button>
             </li>
           </ul>
 
-          <p v-if="algumEmAndamento" class="alerta alerta--info">
+          <p v-if="algumEmAndamento && !algumRemoto" class="alerta alerta--info">
             Uma janela do navegador foi aberta com o Instagram. <strong>Entre na sua conta por ela</strong>
             (e confirme o código, se o Instagram pedir). Assim que o login terminar, a janela fecha
             sozinha e o perfil fica <strong>Conectado</strong>. Sua senha não é guardada pelo sistema.
@@ -120,18 +120,27 @@
 
         <ol class="passos">
           <li>Você informa o @ aqui — <strong>sem senha</strong>.</li>
-          <li v-if="podeConectar">Você clica em <strong>Conectar</strong> e entra no Instagram pela janela que abrir.</li>
+          <li v-if="podeConectar">Você clica em <strong>Conectar</strong> e entra no Instagram pela tela que abrir.</li>
           <li v-else>A equipe conecta o perfil ao sistema com você.</li>
           <li>Pronto: o perfil passa a receber as publicações.</li>
         </ol>
       </form>
     </div>
+
+    <TelaRemota
+      v-if="telaAberta"
+      :remoto="telaAberta.remoto"
+      :username="telaAberta.username"
+      @concluido="aoConcluirTela"
+      @fechar="telaAberta = null"
+    />
   </div>
 </template>
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 
+import TelaRemota from "../components/perfis/TelaRemota.vue";
 import {
   adicionarMinhaConta,
   conectarMeuPerfil,
@@ -230,9 +239,36 @@ function emAndamento(id) {
   return EM_ANDAMENTO.includes(conexao.value[id]?.status);
 }
 
-function definirConexao(id, status, mensagemErro) {
+function definirConexao(id, status, mensagemErro, remoto) {
   const base = TEXTOS[status] || TEXTOS.erro;
-  conexao.value[id] = { status, ...base, ...(mensagemErro ? { texto: mensagemErro } : {}) };
+  const textoRemoto = remoto && EM_ANDAMENTO.includes(status)
+    ? { texto: "Entre na sua conta pela tela do Instagram." }
+    : {};
+  conexao.value[id] = {
+    status,
+    ...base,
+    ...textoRemoto,
+    ...(mensagemErro ? { texto: mensagemErro } : {}),
+    ...(remoto ? { remoto } : {}),
+  };
+}
+
+/* Tela remota: o Instagram aberto no Publicador aparece aqui. */
+const telaAberta = ref(null);
+const algumRemoto = computed(() => Object.values(conexao.value).some((c) => c.remoto));
+
+function abrirTela(conta) {
+  const remoto = conexao.value[conta.id]?.remoto;
+  if (remoto) telaAberta.value = { contaId: conta.id, username: conta.username, remoto };
+}
+
+function aoConcluirTela() {
+  const id = telaAberta.value?.contaId;
+  setTimeout(() => {
+    telaAberta.value = null;
+    if (id) definirConexao(id, "conectado");
+    carregar();
+  }, 1500);
 }
 
 function pararAcompanhamento(id) {
@@ -243,7 +279,8 @@ function pararAcompanhamento(id) {
 async function conectar(conta) {
   try {
     const r = await conectarMeuPerfil(conta.id);
-    definirConexao(conta.id, r.status || "iniciando");
+    definirConexao(conta.id, r.status || "iniciando", null, r.remoto);
+    if (r.remoto) abrirTela(conta);
   } catch (e) {
     definirConexao(conta.id, "erro", e.message);
     return;
@@ -255,9 +292,10 @@ async function conectar(conta) {
     setInterval(async () => {
       try {
         const r = await consultarConexaoMeuPerfil(conta.id);
-        definirConexao(conta.id, r.status);
+        definirConexao(conta.id, r.status, null, r.remoto);
         if (!EM_ANDAMENTO.includes(r.status)) {
           pararAcompanhamento(conta.id);
+          if (r.status !== "conectado" && telaAberta.value?.contaId === conta.id) telaAberta.value = null;
           await carregar();
           // A mensagem de sucesso some sozinha; a de erro fica até nova tentativa.
           if (r.status === "conectado") setTimeout(() => { delete conexao.value[conta.id]; }, 6000);

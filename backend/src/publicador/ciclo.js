@@ -171,7 +171,8 @@ async function avisarAtrasadas() {
 async function executarConexao(pedido) {
     const instagramAuth = require("../services/instagram-auth.service");
     const contaId = pedido.tarefa.conta_id;
-    let atual = await instagramAuth.iniciar(contaId);
+    // Com `remoto`, o Instagram aparece no site de quem pediu (tela remota).
+    let atual = await instagramAuth.iniciar(contaId, { remoto: pedido.remoto || null });
     const limite = Date.now() + LIMITE_CONEXAO_MS;
 
     await estado.porta.informarTarefa(pedido.tarefa.id, atual.mensagem).catch(() => {});

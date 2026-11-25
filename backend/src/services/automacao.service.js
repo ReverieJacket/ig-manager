@@ -13,6 +13,7 @@ const contasRepository = require("../repositories/contas.repository");
 const publicacoesRepository = require("../repositories/publicacoes.repository");
 const contasService = require("./contas.service");
 const publicadorEstado = require("./publicador-estado.service");
+const telaRemota = require("../lib/tela-remota");
 
 const { TIPOS, STATUS_TAREFA } = tarefasRepository;
 const { STATUS } = publicacoesRepository;
@@ -56,15 +57,28 @@ async function conectar(contaId) {
 /** Traduz o pedido de conexão para o formato que as telas já usam. */
 function estadoDaTarefa(conta, tarefa) {
     const base = { contaId: Number(conta.id), username: conta.username };
+    // Tela remota: o Instagram aparece no site para quem clicou em "Conectar".
+    const remoto = telaRemota.dadosDoCanal(tarefa.id);
+    const emAndamento = remoto ? { remoto } : {};
 
     if (tarefa.status === STATUS_TAREFA.PENDENTE) {
-        return { ...base, status: "iniciando", mensagem: "Pedido enviado ao Publicador; o Chromium vai abrir no computador dele." };
+        return {
+            ...base,
+            ...emAndamento,
+            status: "iniciando",
+            mensagem: remoto
+                ? "Abrindo o Instagram no Publicador. Ele vai aparecer aqui em instantes."
+                : "Pedido enviado ao Publicador; o Chromium vai abrir no computador dele."
+        };
     }
     if (tarefa.status === STATUS_TAREFA.EXECUTANDO) {
         return {
             ...base,
+            ...emAndamento,
             status: "aguardando_login",
-            mensagem: tarefa.mensagem || `Entre na conta @${conta.username} no Chromium aberto no computador do Publicador.`
+            mensagem: remoto
+                ? `Entre na conta @${conta.username} na tela do Instagram abaixo.`
+                : tarefa.mensagem || `Entre na conta @${conta.username} no Chromium aberto no computador do Publicador.`
         };
     }
     if (tarefa.status === STATUS_TAREFA.CONCLUIDA) {
