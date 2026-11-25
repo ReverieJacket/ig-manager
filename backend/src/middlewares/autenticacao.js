@@ -7,12 +7,16 @@
  *   (só pode trocar a senha, ver os próprios dados ou sair).
  * - `exigirPerfil(...perfis)`: exige um dos perfis informados.
  *
+ * `autenticar` também abre o contexto do espaço do usuário (lib/espaco):
+ * a partir dali os repositórios só leem e gravam dados desse espaço.
+ *
  * Regra de ouro para as rotas do cliente: o `cliente_id` usado nas
  * consultas vem SEMPRE de `req.usuario.cliente.id`, nunca da URL/corpo.
  */
 const { config } = require("../config/env");
 const { ErroHttp } = require("../lib/erros");
 const { lerCookie } = require("../lib/cookies");
+const { noContexto } = require("../lib/espaco");
 const authService = require("../services/auth.service");
 
 /** Token do app Publicador: `Authorization: Bearer <token>`. */
@@ -32,7 +36,12 @@ async function autenticar(req, res, next) {
 
     req.usuario = resultado.usuario;
     req.sessao = resultado.sessao;
-    next();
+
+    // Tudo o que esta requisição fizer fica restrito ao espaço do usuário.
+    if (!Number.isSafeInteger(resultado.usuario.espacoId)) {
+        throw new ErroHttp(500, "Usuário sem espaço: execute a migração 012.");
+    }
+    return noContexto(resultado.usuario.espacoId, () => next());
 }
 
 function exigirSenhaDefinitiva(req, res, next) {

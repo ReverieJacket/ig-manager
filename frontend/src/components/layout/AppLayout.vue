@@ -152,6 +152,7 @@ const MENU_ADMIN = [
   { para: "/postagens", icone: "⌂", rotulo: "Postagens" },
   { para: "/clientes", icone: "☺", rotulo: "Clientes", contador: "atencao" },
   { para: "/criar", icone: "+", rotulo: "Criar" },
+  { para: "/equipe", icone: "⚑", rotulo: "Equipe" },
 ];
 
 const MENU_CLIENTE = [

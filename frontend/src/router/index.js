@@ -67,6 +67,12 @@ const routes = [
         meta: { titulo: "Clientes", perfil: PERFIS.ADMIN },
       },
       {
+        path: "equipe",
+        name: "equipe",
+        component: () => import("../views/EquipeView.vue"),
+        meta: { titulo: "Equipe", perfil: PERFIS.ADMIN },
+      },
+      {
         path: "minhas-postagens",
         name: "minhas-postagens",
         component: () => import("../views/MinhasPostagensView.vue"),

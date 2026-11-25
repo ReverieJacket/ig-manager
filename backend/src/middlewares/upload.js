@@ -9,6 +9,8 @@
 const fs = require("fs");
 const multer = require("multer");
 
+const { espacoAtual, noContexto } = require("../lib/espaco");
+
 const { config } = require("../config/env");
 const { ErroHttp } = require("../lib/erros");
 const { gerarNome } = require("../lib/imagens");
@@ -59,4 +61,20 @@ const uploadSessao = multer({
     limits: { fileSize: config.sessaoImportada.tamanhoMaximoBytes, files: 1 }
 }).single("arquivo");
 
-module.exports = { uploadImagem, uploadSessao };
+/**
+ * O multer chama o `next` a partir dos eventos do envio, fora do contexto da
+ * requisição: devolve o espaço atual (lib/espaco) antes de seguir.
+ */
+function manterEspaco(middleware) {
+    return function receber(req, res, next) {
+        const espacoId = espacoAtual();
+        middleware(req, res, (erro) =>
+            espacoId === null ? next(erro) : noContexto(espacoId, () => next(erro))
+        );
+    };
+}
+
+module.exports = {
+    uploadImagem: manterEspaco(uploadImagem),
+    uploadSessao: manterEspaco(uploadSessao)
+};

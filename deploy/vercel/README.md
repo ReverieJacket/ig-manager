@@ -22,12 +22,16 @@ isso pelo ⋯ em Postagens.
 
 ---
 
-## 1. Banco: executar a migração 011 (uma vez)
+## 1. Banco: executar as migrações 011 e 012 (uma vez)
 
 No Supabase, abra **SQL Editor** e cole o conteúdo de
 [`backend/db/migrations/011_publicador.sql`](../../backend/db/migrations/011_publicador.sql).
 Depois clique em **Run**. A migração cria as tabelas do Publicador, o status
 "atrasada" e o bucket de imagens.
+
+Depois rode também a
+[`012_espacos.sql`](../../backend/db/migrations/012_espacos.sql) (**antes** de subir a
+versão com espaços): ela cria os espaços e coloca tudo o que já existe num espaço só.
 
 ## 2. Criar o site na Vercel
 
@@ -79,8 +83,15 @@ senha de administrador de sempre.
    digital paga; é esperado).
 3. Siga o instalador (Avançar → Instalar). Ele cria atalhos na área de trabalho e
    no menu Iniciar e abre o Publicador no fim.
-4. Na janela de entrada, informe o **e-mail e a senha de administrador** do site.
+4. Na janela de entrada:
+   - **Já tem conta:** informe o **e-mail e a senha de administrador** do site.
+   - **Primeira vez:** clique em **Criar conta de administrador** e informe nome,
+     empresa (opcional), e-mail e senha. Você ganha um **espaço só seu**, vazio:
+     os seus clientes, perfis e postagens. Administradores de outros espaços não
+     veem nada dele.
+
    O endereço do site já vem preenchido (dá para trocar em *Endereço do site*).
+   Depois entre no site com o mesmo e-mail e senha para cadastrar os clientes.
 5. Pronto: o ícone aparece ao lado do relógio (às vezes escondido na setinha
    **^**) e o site passa a mostrar o Publicador ligado.
 
@@ -88,8 +99,12 @@ senha de administrador de sempre.
   180 dias, criptografado pelo próprio Windows (só abre neste usuário deste
   computador). Trocar a senha no site derruba esse acesso; o Publicador pede o
   login de novo.
-- **Só administradores** entram no Publicador. Usuário com senha provisória
-  precisa trocá-la no site primeiro.
+- **Só administradores** entram no Publicador; os clientes usam só o site.
+  Usuário com senha provisória precisa trocá-la no site primeiro.
+- **Mais de um administrador no mesmo espaço:** no site, em **Equipe**, adicione a
+  pessoa (nome e e-mail). Ela recebe uma senha provisória, cria a própria senha no
+  primeiro acesso e passa a ver os mesmos clientes. Use **um Publicador por
+  espaço**.
 - **Inicia sozinho com o Windows** (padrão). Para desligar: botão direito no
   ícone → desmarque **Iniciar com o Windows**. A escolha fica salva.
 - **Navegador:** o instalado usa o **Microsoft Edge** que já vem no Windows para

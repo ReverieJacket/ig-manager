@@ -350,12 +350,24 @@ function registrarIpc() {
         const site = String(dados?.site || "").trim().replace(/\/+$/, "");
         const email = String(dados?.email || "").trim();
         const senha = String(dados?.senha || "");
+        const criarConta = Boolean(dados?.criarConta);
 
         if (!/^https?:\/\//i.test(site)) return { sucesso: false, mensagem: "Informe o endereço do site (https://...)." };
+        if (criarConta && !String(dados?.nome || "").trim()) return { sucesso: false, mensagem: "Informe o seu nome." };
         if (!email || !senha) return { sucesso: false, mensagem: "Informe o e-mail e a senha." };
+        if (criarConta && senha !== String(dados?.confirmacao || "")) {
+            return { sucesso: false, mensagem: "As senhas não conferem." };
+        }
 
         try {
-            const { token, usuario } = await portaRemota.entrar(site, email, senha);
+            const { token, usuario } = criarConta
+                ? await portaRemota.cadastrar(site, {
+                    nome: String(dados.nome).trim(),
+                    empresa: String(dados?.empresa || "").trim(),
+                    email,
+                    senha
+                })
+                : await portaRemota.entrar(site, email, senha);
             conta = { site, token, email: usuario?.email || email, nome: usuario?.nome || "" };
             gravarConta(conta);
         } catch (erro) {

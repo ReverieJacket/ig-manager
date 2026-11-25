@@ -5,6 +5,7 @@
  * lançam o erro do Supabase em caso de falha.
  */
 const { supabase } = require("../lib/supabase");
+const { noEspaco, comEspaco } = require("../lib/espaco");
 
 const TABELA = "publicacoes";
 /**
@@ -46,9 +47,9 @@ const APROVACAO = Object.freeze({
  * @returns {Promise<object[]>}
  */
 async function listar() {
-    const { data, error } = await supabase
+    const { data, error } = await noEspaco(supabase
         .from(TABELA)
-        .select(COLUNAS)
+        .select(COLUNAS))
         .order("data_hora", { ascending: false });
 
     if (error) throw error;
@@ -67,9 +68,9 @@ async function listar() {
 async function listarPorContas(contaIds, status) {
     if (contaIds.length === 0) return [];
 
-    const { data, error } = await supabase
+    const { data, error } = await noEspaco(supabase
         .from(TABELA)
-        .select(COLUNAS)
+        .select(COLUNAS))
         .in("conta_id", contaIds)
         .in("status", status)
         .order("data_hora", { ascending: false });
@@ -86,9 +87,9 @@ async function listarPorContas(contaIds, status) {
  * @returns {Promise<boolean>}
  */
 async function existeParaConta(contaId) {
-    const { count, error } = await supabase
+    const { count, error } = await noEspaco(supabase
         .from(TABELA)
-        .select("id", { count: "exact", head: true })
+        .select("id", { count: "exact", head: true }))
         .eq("conta_id", contaId);
 
     if (error) throw error;
@@ -103,9 +104,9 @@ async function existeParaConta(contaId) {
  * @returns {Promise<object|null>} A publicação, ou `null` se não existir.
  */
 async function buscarPorId(id) {
-    const { data, error } = await supabase
+    const { data, error } = await noEspaco(supabase
         .from(TABELA)
-        .select(COLUNAS)
+        .select(COLUNAS))
         .eq("id", id)
         .maybeSingle();
 
@@ -122,9 +123,9 @@ async function buscarPorId(id) {
  * @returns {Promise<object[]>}
  */
 async function listarPorStatus(status) {
-    const { data, error } = await supabase
+    const { data, error } = await noEspaco(supabase
         .from(TABELA)
-        .select(COLUNAS)
+        .select(COLUNAS))
         .eq("status", status)
         .order("data_hora", { ascending: true });
 
@@ -140,9 +141,9 @@ async function listarPorStatus(status) {
  * @param {string} ate - ISO 8601.
  */
 async function listarVencidas(ate) {
-    const { data, error } = await supabase
+    const { data, error } = await noEspaco(supabase
         .from(TABELA)
-        .select(COLUNAS)
+        .select(COLUNAS))
         .eq("status", STATUS.AGENDADA)
         .lte("data_hora", ate)
         .order("data_hora", { ascending: true });
@@ -159,9 +160,9 @@ async function listarVencidas(ate) {
  * @param {string} desde - ISO 8601.
  */
 async function listarProximas(desde) {
-    const { data, error } = await supabase
+    const { data, error } = await noEspaco(supabase
         .from(TABELA)
-        .select(COLUNAS)
+        .select(COLUNAS))
         .eq("status", STATUS.AGENDADA)
         .gt("data_hora", desde)
         .order("data_hora", { ascending: true });
@@ -181,7 +182,7 @@ async function listarProximas(desde) {
 async function criar(registro) {
     const { data, error } = await supabase
         .from(TABELA)
-        .insert(registro)
+        .insert(comEspaco(registro))
         .select()
         .single();
 
@@ -198,9 +199,9 @@ async function criar(registro) {
  * @returns {Promise<object>} O registro atualizado.
  */
 async function atualizar(id, campos) {
-    const { data, error } = await supabase
+    const { data, error } = await noEspaco(supabase
         .from(TABELA)
-        .update(campos)
+        .update(campos))
         .eq("id", id)
         .select()
         .single();
@@ -221,9 +222,9 @@ async function atualizar(id, campos) {
 async function listarComAprovacao(contaIds, desde) {
     if (contaIds.length === 0) return [];
 
-    const { data, error } = await supabase
+    const { data, error } = await noEspaco(supabase
         .from(TABELA)
-        .select(COLUNAS)
+        .select(COLUNAS))
         .in("conta_id", contaIds)
         .not("aprovacao", "is", null)
         .gte("data_hora", desde)
@@ -243,9 +244,9 @@ async function listarComAprovacao(contaIds, desde) {
  *   status já não era permitido.
  */
 async function atualizarSeStatus(id, campos, statusPermitidos) {
-    const { data, error } = await supabase
+    const { data, error } = await noEspaco(supabase
         .from(TABELA)
-        .update(campos)
+        .update(campos))
         .eq("id", id)
         .in("status", statusPermitidos)
         .select()

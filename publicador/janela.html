@@ -34,6 +34,7 @@
   .nota { color: #666; font-size: 12.5px; margin: 0; line-height: 1.5; }
   .aviso { background: #fff7e6; border: 1px solid #f3d19c; color: #8a4b00; border-radius: 8px; padding: 9px 11px; font-size: 13px; }
   details summary { cursor: pointer; color: #555; font-size: 13px; }
+  a { color: #1d4ed8; }
 </style>
 </head>
 <body>
@@ -96,48 +97,71 @@
     return div;
   }
 
+  /** Tela de entrada: "Entrar" (conta existente) ou "Criar conta" (novo administrador). */
+  function mostrarLogin(dados, criar) {
+    const lista = $("lista"), rodape = $("rodape");
+    lista.innerHTML = ""; rodape.innerHTML = "";
+    $("cabecalho").className = "info";
+    $("titulo").textContent = criar ? "Criar conta de administrador" : "Entrar no IG Manager Publicador";
+    $("descricao").textContent = criar
+      ? "Você ganha um espaço só seu: os seus clientes, perfis e postagens. Outros administradores não veem nada dele."
+      : "Use o seu e-mail e senha de administrador do IG Manager. O login fica guardado neste computador, " +
+        "criptografado pelo Windows; a senha não é guardada.";
+    const form = document.createElement("form");
+    form.className = "login";
+    form.innerHTML = `
+      <div class="aviso" id="aviso" hidden></div>
+      ${criar ? `<label>Seu nome<input id="nome" autocomplete="name" maxlength="120" required></label>
+      <label>Empresa ou agência <span style="font-weight:400;color:#666">(opcional)</span><input id="empresa" autocomplete="organization" maxlength="120"></label>` : ""}
+      <label>E-mail<input id="email" type="email" autocomplete="username" required></label>
+      <label>Senha${criar ? ' <span style="font-weight:400;color:#666">(mínimo 8 caracteres)</span>' : ""}<input id="senha" type="password" autocomplete="${criar ? "new-password" : "current-password"}" ${criar ? 'minlength="8"' : ""} required></label>
+      ${criar ? '<label>Repita a senha<input id="confirmacao" type="password" autocomplete="new-password" required></label>' : ""}
+      <details><summary>Endereço do site</summary>
+        <label style="margin-top:8px">Site<input id="site" type="url" required></label>
+      </details>
+      <button type="submit" hidden></button>
+      <p class="nota">${criar ? "Já tem conta?" : "Ainda não tem conta?"} <a href="#" id="alternar">${criar ? "Entrar" : "Criar conta de administrador"}</a></p>
+      <p class="nota">Só administradores usam o Publicador; os clientes usam só o site. Ele inicia junto com o Windows (dá para mudar no menu do ícone).</p>`;
+    lista.append(form);
+    $("email").value = dados.email || "";
+    $("site").value = dados.site || "";
+    if (dados.aviso && !criar) { $("aviso").hidden = false; $("aviso").textContent = dados.aviso; }
+    if (!dados.site) form.querySelector("details").open = true;
+    $("alternar").addEventListener("click", (e) => {
+      e.preventDefault();
+      mostrarLogin({ ...dados, aviso: "", email: $("email").value, site: $("site").value }, !criar);
+    });
+    const enviar = botao(criar ? "Criar conta" : "Entrar", "primario", async () => {
+      if (!form.reportValidity()) return;
+      enviar.disabled = true;
+      $("aviso").hidden = true;
+      const r = await window.publicador.entrar({
+        criarConta: criar,
+        site: $("site").value,
+        email: $("email").value,
+        senha: $("senha").value,
+        ...(criar ? { nome: $("nome").value, empresa: $("empresa").value, confirmacao: $("confirmacao").value } : {})
+      });
+      enviar.disabled = false;
+      if (!r.sucesso) { $("aviso").hidden = false; $("aviso").textContent = r.mensagem; return; }
+      $("titulo").textContent = criar ? "Conta criada ✓" : "Pronto ✓";
+      $("descricao").textContent = r.mensagem +
+        (criar ? " Entre no site com o mesmo e-mail e senha para cadastrar os seus clientes." : "") +
+        " Esta janela fecha sozinha.";
+      form.remove(); rodape.innerHTML = "";
+      setTimeout(() => window.publicador.fechar(), criar ? 6000 : 2500);
+    });
+    form.addEventListener("submit", (e) => { e.preventDefault(); enviar.click(); });
+    rodape.append(botao("Agora não", "", () => window.publicador.fechar()), enviar);
+    setTimeout(() => (criar ? $("nome") : dados.email ? $("senha") : $("email")).focus(), 50);
+  }
+
   window.publicador.aoReceber((dados) => {
     const lista = $("lista"), rodape = $("rodape");
     lista.innerHTML = ""; rodape.innerHTML = "";
 
     if (dados.modo === "login") {
-      $("cabecalho").className = "info";
-      $("titulo").textContent = "Entrar no IG Manager Publicador";
-      $("descricao").textContent =
-        "Use o seu e-mail e senha de administrador do IG Manager. O login fica guardado neste computador, " +
-        "criptografado pelo Windows; a senha não é guardada.";
-      const form = document.createElement("form");
-      form.className = "login";
-      form.innerHTML = `
-        <div class="aviso" id="aviso" hidden></div>
-        <label>E-mail<input id="email" type="email" autocomplete="username" required></label>
-        <label>Senha<input id="senha" type="password" autocomplete="current-password" required></label>
-        <details><summary>Endereço do site</summary>
-          <label style="margin-top:8px">Site<input id="site" type="url" required></label>
-        </details>
-        <button type="submit" hidden></button>
-        <p class="nota">Só administradores podem usar o Publicador. Ele inicia junto com o Windows (dá para mudar no menu do ícone).</p>`;
-      lista.append(form);
-      $("email").value = dados.email || "";
-      $("site").value = dados.site || "";
-      if (dados.aviso) { $("aviso").hidden = false; $("aviso").textContent = dados.aviso; }
-      if (!dados.site) form.querySelector("details").open = true;
-      const entrar = botao("Entrar", "primario", async () => {
-        if (!form.reportValidity()) return;
-        entrar.disabled = true;
-        $("aviso").hidden = true;
-        const r = await window.publicador.entrar({ site: $("site").value, email: $("email").value, senha: $("senha").value });
-        entrar.disabled = false;
-        $("senha").value = "";
-        if (!r.sucesso) { $("aviso").hidden = false; $("aviso").textContent = r.mensagem; return; }
-        $("titulo").textContent = "Pronto ✓";
-        $("descricao").textContent = r.mensagem + " Esta janela fecha sozinha.";
-        form.remove(); rodape.innerHTML = "";
-        setTimeout(() => window.publicador.fechar(), 2500);
-      });
-      form.addEventListener("submit", (e) => { e.preventDefault(); entrar.click(); });
-      rodape.append(botao("Agora não", "", () => window.publicador.fechar()), entrar);
-      setTimeout(() => (dados.email ? $("senha") : $("email")).focus(), 50);
+      mostrarLogin(dados, false);
       return;
     }
 

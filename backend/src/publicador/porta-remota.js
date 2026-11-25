@@ -106,13 +106,27 @@ function criarPortaRemota({ site, token, aoPerderSessao = () => {} }) {
  * @returns {Promise<{token: string, usuario: object}>}
  */
 async function entrar(site, email, senha) {
+    return pedirLogin(site, "entrar", { email, senha });
+}
+
+/**
+ * Cria a conta de administrador (e um espaço novo) e já entra.
+ *
+ * @param {string} site
+ * @param {{nome: string, empresa?: string, email: string, senha: string}} dados
+ */
+async function cadastrar(site, dados) {
+    return pedirLogin(site, "cadastrar", dados);
+}
+
+async function pedirLogin(site, acao, corpo) {
     const base = `${String(site).replace(/\/+$/, "")}/api`;
     let resposta;
     try {
-        resposta = await fetch(`${base}/publicador/entrar`, {
+        resposta = await fetch(`${base}/publicador/${acao}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email, senha }),
+            body: JSON.stringify(corpo),
             signal: AbortSignal.timeout(30 * 1000)
         });
     } catch (erro) {
@@ -123,4 +137,4 @@ async function entrar(site, email, senha) {
     return { token: dados.token, usuario: dados.usuario };
 }
 
-module.exports = { criarPortaRemota, entrar, ErroSessao };
+module.exports = { criarPortaRemota, entrar, cadastrar, ErroSessao };
