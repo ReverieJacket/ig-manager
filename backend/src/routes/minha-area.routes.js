@@ -34,16 +34,18 @@ const publicacoesService = require("../services/publicacoes.service");
 const aprovacoesService = require("../services/aprovacoes.service");
 const retomadaService = require("../services/retomada.service");
 
+const telaRemota = require("../lib/tela-remota");
 const router = Router();
 
 /**
- * O cliente só conecta o próprio perfil quando o Chromium abre na tela
- * dele: tudo no mesmo computador (modo "completo"). Na Vercel o Chromium
- * abre no computador do Publicador; até o navegador remoto, quem conecta
- * é a equipe.
+ * O cliente conecta o próprio perfil quando o Instagram aparece na tela
+ * dele: tudo no mesmo computador (modo "completo") ou, na Vercel, pela tela
+ * remota (lib/tela-remota, requer SUPABASE_ANON_KEY).
  */
 const clientePodeConectar = () =>
-    config.conexaoPeloCliente && config.conexaoNoServidor && config.modo !== MODOS.API;
+    (config.conexaoPeloCliente && config.conexaoNoServidor && config.modo !== MODOS.API) ||
+    // Na Vercel, com a tela remota o Instagram aparece no site do cliente.
+    telaRemota.disponivel();
 
 router.get("/contas", async (req, res) => {
     const contas = await contasRepository.listarPorCliente(req.usuario.cliente.id);

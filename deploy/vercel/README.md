@@ -56,7 +56,14 @@ versão com espaços): ela cria os espaços e coloca tudo o que já existe num e
      | `NODE_ENV` | `production` |
      | `IG_MODO` | `api` |
      | `CONEXAO_PELO_CLIENTE` | `false` |
+     | `SUPABASE_ANON_KEY` | chave **anon public** (ou *Publishable key*) em Supabase → Project Settings → API Keys |
 
+   `SUPABASE_ANON_KEY` liga a **tela remota**: quem clica em **Conectar** (cliente
+   ou administrador, no celular ou em qualquer computador) vê o Instagram aberto
+   no Publicador e faz o login pelo próprio site. A chave anon é pública por
+   natureza; nunca coloque a `service_role` no lugar dela. No Supabase, em
+   **Realtime → Settings**, deixe **Allow public access** ligado (os canais são
+   secretos e de uso único).
 4. Clique em **Deploy** e espere 1 a 2 minutos. O endereço vai aparecer, algo
    como `https://ig-manager-xxxx.vercel.app`.
 5. Volte em **Settings → Environment Variables**, adicione
@@ -152,7 +159,7 @@ Pede o mesmo login. Os registros ficam em `backend\storage\logs`.
 
 | Situação | O que acontece |
 |---|---|
-| **Conectar um perfil** (site → Clientes → Conectar) | O Chromium abre **no computador do Publicador** para o login no Instagram |
+| **Conectar um perfil** (Clientes → Conectar, ou o cliente em Meus perfis) | Com `SUPABASE_ANON_KEY`: o Instagram aparece **no site de quem clicou**, que faz o login por ali (o Publicador precisa estar ligado). Sem ela: o navegador abre no computador do Publicador |
 | **Publicar agora** | Entra na fila e sai em instantes; o resultado aparece em Postagens |
 | **Fechar o Publicador / desligar o Windows** | Aviso com quantas publicações estão agendadas e para quais horários: com ele desligado, elas **não serão publicadas** |
 | **Ligar de novo** | Se algo venceu nesse tempo, ele pergunta: **Publicar agora** ou **Reagendar** |

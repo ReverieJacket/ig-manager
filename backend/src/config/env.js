@@ -95,7 +95,15 @@ const config = {
 
     supabase: {
         url: process.env.SUPABASE_URL,
-        chaveServico: process.env.SUPABASE_SERVICE_ROLE_KEY
+        chaveServico: process.env.SUPABASE_SERVICE_ROLE_KEY,
+        /**
+         * Chave pública (anon) do Supabase. Usada só pela tela remota da
+         * conexão do Instagram (Supabase Realtime): com ela, quem clica em
+         * "Conectar" (cliente ou administrador, em qualquer aparelho) vê o
+         * Instagram aberto no Publicador e faz o login pelo site. Sem ela, o
+         * navegador abre na tela do computador do Publicador, como antes.
+         */
+        chavePublica: process.env.SUPABASE_ANON_KEY || ""
     },
 
     diretorios: {
