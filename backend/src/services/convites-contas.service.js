@@ -78,7 +78,7 @@ async function cadastrarNoEspaco(convite, dados) {
   if (!username || username.length > 30 || !/^[a-z0-9._]+$/.test(username)) {
     throw new ErroHttp(400, "Informe um usuário válido do Instagram.");
   }
-  if (await contasRepository.buscarPorUsername(username)) {
+  if (await contasRepository.usernameEmUso(username)) {
     throw new ErroHttp(409, "Este usuário do Instagram já está cadastrado.");
   }
   // Consome o convite uma única vez antes de criar a conta.

@@ -30,8 +30,13 @@ async function validarNovaConta(dados) {
         throw new ErroHttp(400, "Informe um nome de usuário válido do Instagram (até 30 caracteres, letras, números, pontos e sublinhados).");
     }
 
-    const existente = await contasRepository.buscarPorUsername(username);
-    if (existente) throw new ErroHttp(409, "Já existe um perfil cadastrado com esse usuário do Instagram.");
+    if (await contasRepository.buscarPorUsername(username)) {
+        throw new ErroHttp(409, "Já existe um perfil cadastrado com esse usuário do Instagram.");
+    }
+    // Cadastrado por outra equipe (outro espaço): não revela de quem.
+    if (await contasRepository.usernameEmUso(username)) {
+        throw new ErroHttp(409, "Este perfil do Instagram já está cadastrado no IG Manager por outra equipe.");
+    }
 
     return { nome, username };
 }
