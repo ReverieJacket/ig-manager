@@ -6,11 +6,12 @@
  * `buscarHashPorId`; as demais nunca devolvem o hash.
  */
 const { supabase } = require("../lib/supabase");
+const { noEspaco, comEspaco } = require("../lib/espaco");
 
 const TABELA = "usuarios";
 const COLUNAS =
     "id, nome, email, perfil, cliente_id, ativo, ultimo_acesso, criado_em, " +
-    "senha_temporaria, sessao_versao, clientes(id, nome, ativo)";
+    "senha_temporaria, sessao_versao, espaco_id, clientes(id, nome, ativo), espacos(id, nome)";
 
 /** Código do Postgres para violação de unicidade (e-mail repetido). */
 const VIOLACAO_UNICA = "23505";
@@ -40,8 +41,9 @@ async function buscarHashPorId(id) {
 }
 
 async function buscarPorId(id) {
-    const { data, error } = await supabase
-        .from(TABELA).select(COLUNAS).eq("id", id).maybeSingle();
+    // Fora de uma requisição (middleware de login) não há filtro de espaço.
+    const { data, error } = await noEspaco(supabase
+        .from(TABELA).select(COLUNAS)).eq("id", id).maybeSingle();
     if (error) throw error;
     return data;
 }
@@ -55,9 +57,10 @@ async function buscarPorEmail(email) {
 
 /** Usuários de um cliente, do mais antigo para o mais novo. */
 async function listarPorCliente(clienteId) {
-    const { data, error } = await supabase
-        .from(TABELA).select(COLUNAS)
+    const { data, error } = await noEspaco(supabase
+        .from(TABELA).select(COLUNAS))
         .eq("cliente_id", clienteId)
+        .eq("perfil", "cliente")
         .order("id", { ascending: true });
     if (error) throw error;
     return data || [];
@@ -71,7 +74,7 @@ async function listarPorCliente(clienteId) {
 async function criar(usuario) {
     const { data, error } = await supabase
         .from(TABELA)
-        .insert({ ...usuario, email: normalizarEmail(usuario.email) })
+        .insert(comEspaco({ ...usuario, email: normalizarEmail(usuario.email) }))
         .select(COLUNAS)
         .single();
     if (error) throw error;
@@ -83,8 +86,8 @@ async function atualizar(id, campos) {
         ? { ...campos, email: normalizarEmail(campos.email) }
         : campos;
 
-    const { data, error } = await supabase
-        .from(TABELA).update(dados).eq("id", id).select(COLUNAS).single();
+    const { data, error } = await noEspaco(supabase
+        .from(TABELA).update(dados).eq("id", id)).select(COLUNAS).single();
     if (error) throw error;
     return data;
 }
@@ -103,13 +106,24 @@ async function registrarAcesso(id) {
  */
 async function buscarNomesPorIds(ids) {
     if (ids.length === 0) return [];
-    const { data, error } = await supabase
-        .from(TABELA).select("id, nome, perfil").in("id", ids);
+    const { data, error } = await noEspaco(supabase
+        .from(TABELA).select("id, nome, perfil")).in("id", ids);
+    if (error) throw error;
+    return data || [];
+}
+
+/** Administradores do espaço atual, do mais antigo para o mais novo. */
+async function listarAdministradores() {
+    const { data, error } = await noEspaco(supabase
+        .from(TABELA).select(COLUNAS))
+        .eq("perfil", "admin")
+        .order("id", { ascending: true });
     if (error) throw error;
     return data || [];
 }
 
 module.exports = {
+    listarAdministradores,
     VIOLACAO_UNICA,
     normalizarEmail,
     buscarParaLogin,

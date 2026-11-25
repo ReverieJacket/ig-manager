@@ -343,5 +343,10 @@ module.exports = {
     adicionarUsuario,
     redefinirSenha,
     atualizarUsuario,
-    contaComStatus
+    contaComStatus,
+    // Usados também pelo serviço de administradores.
+    validarNome,
+    validarEmail,
+    tratarEmailRepetido,
+    usuarioParaAdmin
 };

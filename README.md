@@ -100,6 +100,12 @@ Clientes → ⋯ → Enviar sessão (`POST /perfis/:id/sessao`, só administrado
 
 ## Banco de dados (Supabase)
 
+- `espacos` (012): cada administrador que se cadastra pelo Publicador ganha um espaço.
+  `usuarios`, `clientes`, `contas_instagram`, `convites_contas_instagram`, `publicacoes`
+  e `tarefas_automacao` têm `espaco_id`; o backend filtra tudo pelo espaço de quem está
+  logado (`lib/espaco.js`). Os dados de antes da 012 ficam no primeiro espaço.
+- `publicadores` (012): sinal de vida do Publicador, um por espaço (substitui
+  `publicador_estado`)
 - `clientes`: `id`, `nome`, `ativo`
 - `usuarios`: `id`, `nome`, `email`, `senha_hash`, `perfil` (`admin` | `cliente`), `cliente_id`, `ativo`
 - `contas_instagram` (perfis do Instagram): `id`, `nome`, `username`, `ativo`, `cliente_id`,
@@ -121,10 +127,17 @@ Clientes → ⋯ → Enviar sessão (`POST /perfis/:id/sessao`, só administrado
 
 Todo acesso exige login, exceto o link de convite. Execute no Supabase as migrações
 `004_clientes_usuarios.sql`, `005_area_cliente.sql`, `006_excluir_cliente.sql` e
-`007_sessao_expirada.sql`, `008_aprovacoes.sql`, `009_cancelar_publicacao.sql`, `010_retomar_publicacao.sql` e crie o primeiro administrador
-com `npm run criar:admin` (rodar de novo com o mesmo e-mail redefine a senha).
+`007_sessao_expirada.sql`, `008_aprovacoes.sql`, `009_cancelar_publicacao.sql`, `010_retomar_publicacao.sql`,
+`011_publicador.sql` e `012_espacos.sql`. Administradores novos se cadastram pelo app
+Publicador (**Criar conta de administrador**); `npm run criar:admin` cria um administrador
+no primeiro espaço (rodar de novo com o mesmo e-mail redefine a senha).
 
-- **Administrador:** Postagens, **Clientes** e Criar. Em *Clientes* fica tudo de cada
+**Espaços:** cada administrador cadastrado pelo Publicador tem o próprio espaço, com os
+próprios clientes, perfis, postagens e Publicador; administradores de outros espaços não
+veem nada dele. Para dividir o trabalho, ele adiciona outros administradores em
+**Equipe** (mesmo espaço, senha provisória no primeiro acesso).
+
+- **Administrador:** Postagens, **Clientes**, Criar e **Equipe**. Em *Clientes* fica tudo de cada
   cliente, em duas abas:
   - *Perfis do Instagram*: adicionar perfil, **Conectar/Reconectar**, desconectar,
     renomear, remover e gerar o **Link para o cliente** (validade de 24 h, 3 ou 7 dias)
@@ -177,6 +190,12 @@ Quem está com senha temporária só acessa `/auth/*` até criar a própria senh
 | DELETE | `/perfis/:id` | admin | Remove; recusado (409) se o perfil tiver publicações |
 | PATCH | `/usuarios/:id` | admin | `nome`, `email`, `ativo` (só usuários cliente) |
 | POST | `/usuarios/:id/redefinir-senha` | admin | Nova senha temporária |
+| GET | `/administradores` | admin | Administradores do mesmo espaço |
+| POST | `/administradores` | admin | `nome`, `email` → cria administrador no mesmo espaço (devolve a senha temporária) |
+| PATCH | `/administradores/:id` | admin | `nome`, `email`, `ativo` (não desativa a si mesmo) |
+| POST | `/administradores/:id/redefinir-senha` | admin | Nova senha temporária |
+| POST | `/publicador/entrar` | público | Login do app Publicador (só administrador) → `{ token, usuario }` |
+| POST | `/publicador/cadastrar` | público | `nome`, `empresa?`, `email`, `senha` → cria espaço + administrador e já entra |
 | GET | `/minha-area/contas` | cliente | Perfis do cliente, com status da conexão |
 | POST | `/minha-area/contas` | cliente | Informa um perfil (`nome`, `username`) |
 | POST | `/minha-area/contas/:id/conectar` | cliente | Abre o Chromium para o login no Instagram (só perfis do próprio cliente; requer `CONEXAO_PELO_CLIENTE`) |

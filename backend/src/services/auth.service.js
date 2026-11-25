@@ -39,6 +39,8 @@ function usuarioPublico(usuario) {
         email: usuario.email,
         perfil: usuario.perfil,
         senhaTemporaria: Boolean(usuario.senha_temporaria),
+        espacoId: usuario.espaco_id == null ? null : Number(usuario.espaco_id),
+        espaco: usuario.espacos ? { id: Number(usuario.espacos.id), nome: usuario.espacos.nome } : null,
         cliente: usuario.clientes
             ? { id: usuario.clientes.id, nome: usuario.clientes.nome }
             : null

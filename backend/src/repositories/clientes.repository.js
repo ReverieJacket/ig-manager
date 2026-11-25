@@ -3,9 +3,10 @@
  * Camada de acesso a dados: só conhece o Supabase.
  */
 const { supabase } = require("../lib/supabase");
+const { noEspaco, comEspaco } = require("../lib/espaco");
 
 const TABELA = "clientes";
-const COLUNAS = "id, nome, ativo, criado_em";
+const COLUNAS = "id, nome, ativo, criado_em, espaco_id";
 
 /** Código do Postgres para violação de unicidade. */
 const VIOLACAO_UNICA = "23505";
@@ -16,16 +17,16 @@ function escaparPadrao(texto) {
 }
 
 async function buscarPorId(id) {
-    const { data, error } = await supabase
-        .from(TABELA).select(COLUNAS).eq("id", id).maybeSingle();
+    const { data, error } = await noEspaco(supabase
+        .from(TABELA).select(COLUNAS)).eq("id", id).maybeSingle();
     if (error) throw error;
     return data;
 }
 
 /** Busca pelo nome, sem diferenciar maiúsculas/minúsculas. */
 async function buscarPorNome(nome) {
-    const { data, error } = await supabase
-        .from(TABELA).select(COLUNAS)
+    const { data, error } = await noEspaco(supabase
+        .from(TABELA).select(COLUNAS))
         .ilike("nome", escaparPadrao(nome.trim()))
         .maybeSingle();
     if (error) throw error;
@@ -44,7 +45,7 @@ async function buscarOuCriarPorNome(nome) {
     if (existente) return existente;
 
     const { data, error } = await supabase
-        .from(TABELA).insert({ nome: nome.trim() }).select(COLUNAS).single();
+        .from(TABELA).insert(comEspaco({ nome: nome.trim() })).select(COLUNAS).single();
 
     if (error?.code === VIOLACAO_UNICA) return buscarPorNome(nome);
     if (error) throw error;
@@ -57,11 +58,11 @@ async function buscarOuCriarPorNome(nome) {
  * administrador), em ordem alfabética.
  */
 async function listarComResumo() {
-    const { data, error } = await supabase
+    const { data, error } = await noEspaco(supabase
         .from(TABELA)
         .select(
             `${COLUNAS}, usuarios(id, ativo, senha_temporaria), contas_instagram(*)`
-        )
+        ))
         .order("nome", { ascending: true });
     if (error) throw error;
     return data || [];
@@ -74,14 +75,14 @@ async function listarComResumo() {
  */
 async function criar(nome) {
     const { data, error } = await supabase
-        .from(TABELA).insert({ nome: nome.trim() }).select(COLUNAS).single();
+        .from(TABELA).insert(comEspaco({ nome: nome.trim() })).select(COLUNAS).single();
     if (error) throw error;
     return data;
 }
 
 async function atualizar(id, campos) {
-    const { data, error } = await supabase
-        .from(TABELA).update(campos).eq("id", id).select(COLUNAS).single();
+    const { data, error } = await noEspaco(supabase
+        .from(TABELA).update(campos).eq("id", id)).select(COLUNAS).single();
     if (error) throw error;
     return data;
 }
@@ -95,6 +96,9 @@ async function atualizar(id, campos) {
  * @returns {Promise<{contasExcluidas: number[], usuariosExcluidos: number}>}
  */
 async function excluir(id) {
+    // A função do banco não conhece espaços: confere antes que o cliente é deste.
+    if (!(await buscarPorId(id))) return { contasExcluidas: [], usuariosExcluidos: 0, naoEncontrado: true };
+
     const { data, error } = await supabase.rpc("excluir_cliente", { p_cliente_id: id });
     if (error) throw error;
 

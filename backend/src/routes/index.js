@@ -17,6 +17,8 @@ const minhaAreaRoutes = require("./minha-area.routes");
 const perfisRoutes = require("./perfis.routes");
 const tarefasRoutes = require("./tarefas.routes");
 const publicadorRoutes = require("./publicador.routes");
+const administradoresRoutes = require("./administradores.routes");
+const administradoresService = require("../services/administradores.service");
 const { limitarLogin, registrarFalha, registrarSucesso } = require("../middlewares/limiteLogin");
 const { ErroHttp } = require("../lib/erros");
 const {
@@ -54,6 +56,13 @@ router.post("/publicador/entrar", limitarLogin, async (req, res) => {
     res.json({ sucesso: true, token: sessao.token, usuario: sessao.usuario });
 });
 
+// Cadastro de administrador pelo app Publicador: cria um espaço novo, vazio,
+// e já devolve o login do app.
+router.post("/publicador/cadastrar", async (req, res) => {
+    const sessao = await administradoresService.cadastrar(req.body);
+    res.status(201).json({ sucesso: true, token: sessao.token, usuario: sessao.usuario });
+});
+
 // Link de convite aberto pelo cliente (ainda sem login).
 router.use("/contas/convites", convitesPublicosRoutes);
 
@@ -68,6 +77,7 @@ router.use("/usuarios", ...somenteAdmin, usuariosRoutes);
 router.use("/perfis", ...somenteAdmin, perfisRoutes);
 router.use("/tarefas", ...somenteAdmin, tarefasRoutes);
 router.use("/publicador", ...somenteAdmin, publicadorRoutes);
+router.use("/administradores", ...somenteAdmin, administradoresRoutes);
 
 /* --------------------------- Rotas do cliente ---------------------------- */
 

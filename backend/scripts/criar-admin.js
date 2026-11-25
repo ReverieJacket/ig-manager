@@ -10,6 +10,7 @@ const readline = require("readline");
 
 const { gerarHash, validarSenhaNova } = require("../src/lib/senhas");
 const usuariosRepository = require("../src/repositories/usuarios.repository");
+const espacosRepository = require("../src/repositories/espacos.repository");
 
 function lerArgumento(nome) {
     const indice = process.argv.indexOf(`--${nome}`);
@@ -77,7 +78,11 @@ async function principal() {
         });
         console.log(`Senha do administrador ${email} redefinida.`);
     } else {
-        await usuariosRepository.criar({ nome, email, senha_hash, perfil: "admin", cliente_id: null });
+        // Entra no primeiro espaço (o dos dados de antes da migração 012).
+        const espaco = (await espacosRepository.primeiro()) || (await espacosRepository.criar("IG Manager"));
+        await usuariosRepository.criar({
+            nome, email, senha_hash, perfil: "admin", cliente_id: null, espaco_id: espaco.id
+        });
         console.log(`Administrador ${email} criado. Já pode entrar no sistema.`);
     }
 }

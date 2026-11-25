@@ -7,6 +7,7 @@ const contasRepository = require("../repositories/contas.repository");
 const clientesRepository = require("../repositories/clientes.repository");
 const { config } = require("../config/env");
 const { ErroHttp } = require("../lib/erros");
+const { noContexto } = require("../lib/espaco");
 
 function hashToken(token) {
   return crypto.createHash("sha256").update(token).digest("hex");
@@ -67,6 +68,10 @@ async function consultar(token) {
 async function cadastrar(token, dados) {
   validarToken(token);
   const convite = estadoConvite(await contasRepository.buscarConvitePorHash(hashToken(token)));
+  // Rota pública: o perfil entra no espaço de quem gerou o convite.
+  return noContexto(convite.espaco_id, () => cadastrarNoEspaco(convite, dados));
+}
+async function cadastrarNoEspaco(convite, dados) {
   const nome = String(dados?.nome || "").trim();
   const username = String(dados?.username || "").trim().replace(/^@+/, "").toLowerCase();
   if (!nome || nome.length > 120) throw new ErroHttp(400, "Informe um nome válido para a conta.");
