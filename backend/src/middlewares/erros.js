@@ -61,6 +61,15 @@ function tratarErros(erro, req, res, next) {
         });
     }
 
+    // Registro repetido no banco (Postgres 23505): conflito, não falha do servidor.
+    if (erro?.code === "23505") {
+        res.err = erro instanceof Error ? erro : new Error(formatarErro(erro));
+        return res.status(409).json({
+            sucesso: false,
+            mensagem: "Esse registro já existe no sistema."
+        });
+    }
+
     // O pino-http (middleware de requisições) registra a resposta 500 e
     // anexa este erro, com pilha e id da requisição, em uma única linha.
     res.err = erro instanceof Error ? erro : new Error(formatarErro(erro));

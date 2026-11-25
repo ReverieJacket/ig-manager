@@ -146,7 +146,20 @@ async function marcarConviteUtilizado(id) {
     if (error) throw error;
     return data;
 }
+/**
+ * O @ já está cadastrado em QUALQUER espaço? Um perfil do Instagram só pode
+ * pertencer a um espaço (dois Publicadores no mesmo perfil dariam conflito).
+ */
+async function usernameEmUso(username) {
+    const { data, error } = await supabase.from(TABELA)
+        .select("id").ilike("username", username.replace(/[\\%_]/g, (c) => `\\${c}`))
+        .limit(1);
+    if (error) throw error;
+    return (data || []).length > 0;
+}
+
 module.exports = {
+    usernameEmUso,
     listarAtivas,
     listarAtivasComCliente,
     buscarPorId,
