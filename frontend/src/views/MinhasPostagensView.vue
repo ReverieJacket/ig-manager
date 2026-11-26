@@ -145,6 +145,7 @@ import ModalRetomar from "../components/publicacoes/ModalRetomar.vue";
 import { listarAprovacoes, listarMinhasPublicacoes, retomarPublicacao } from "../api/minhaArea";
 import { APROVACAO, STATUS } from "../constants/publicacoes";
 import { formatarCurtidas, formatarData } from "../utils/formatadores";
+import { useAtualizacaoAutomatica } from "../composables/useAtualizacaoAutomatica";
 
 const ABAS = [
   { valor: "todas", rotulo: "Todas" },
@@ -258,6 +259,7 @@ async function aoRetomar({ acao, dataHora }) {
 }
 
 onMounted(carregar);
+useAtualizacaoAutomatica(() => carregar({ silencioso: true }));
 </script>
 
 <style scoped>

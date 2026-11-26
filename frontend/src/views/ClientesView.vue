@@ -464,6 +464,7 @@ import { conectarInstagram, consultarConexao, desconectarInstagram } from "../ap
 import { adicionarPerfil, gerarLinkCliente, obterConfigPerfis, removerPerfil, renomearPerfil } from "../api/perfis";
 import { useAlertasPerfis } from "../composables/useAlertasPerfis";
 import { formatarData } from "../utils/formatadores";
+import { useAtualizacaoAutomatica } from "../composables/useAtualizacaoAutomatica";
 
 const VALIDADES = [
   { horas: 24, rotulo: "24 horas" },
@@ -516,18 +517,32 @@ const aba = ref("perfis");
 
 const perfisExpirados = computed(() => (detalhe.value?.contas || []).filter((p) => p.status === "expirada").length);
 
-async function carregarDetalhe() {
+async function carregarDetalhe({ silencioso = false } = {}) {
   if (!selecionadoId.value) return;
-  carregandoDetalhe.value = true;
-  erroDetalhe.value = "";
+  const id = selecionadoId.value;
+  if (!silencioso) {
+    carregandoDetalhe.value = true;
+    erroDetalhe.value = "";
+  }
   try {
-    detalhe.value = await buscarCliente(selecionadoId.value);
+    const dados = await buscarCliente(id);
+    // Trocou de cliente enquanto carregava: descarta.
+    if (selecionadoId.value === id) detalhe.value = dados;
   } catch (e) {
-    erroDetalhe.value = e.message;
+    if (!silencioso) erroDetalhe.value = e.message;
   } finally {
-    carregandoDetalhe.value = false;
+    if (!silencioso) carregandoDetalhe.value = false;
   }
 }
+
+// Perfis conectados, convites usados e contadores aparecem sozinhos.
+useAtualizacaoAutomatica(() =>
+  Promise.all([
+    carregarDetalhe({ silencioso: true }),
+    listarClientes().then((l) => { clientes.value = l; }),
+    alertas.atualizar({ forcar: true }),
+  ])
+);
 
 /**
  * Celular/tablet: a lista e o detalhe não cabem lado a lado. Tocar num

@@ -99,6 +99,7 @@ async function iniciar(contaId, { remoto = null } = {}) {
         }
       });
       await p.page.goto(telaRemota.INICIO, { waitUntil: "domcontentloaded", timeout: 60000 });
+      p.usuarioPreenchido = await preencherUsuario(p.page, conta.username);
     } else {
       p.context = await p.browser.newContext({ viewport: { width: 1366, height: 768 }, locale: "pt-BR" });
       p.page = await p.context.newPage();
@@ -106,7 +107,9 @@ async function iniciar(contaId, { remoto = null } = {}) {
     }
     p.status = "aguardando_login";
     p.mensagem = remoto
-      ? `Entre na conta @${conta.username} na tela do Instagram. A sessão será salva automaticamente.`
+      ? (p.usuarioPreenchido
+        ? `O usuário @${conta.username} já está preenchido. Toque no campo da senha, digite a sua senha e toque em Entrar.`
+        : `Toque no campo do usuário, digite @${conta.username}, depois a senha, e toque em Entrar.`)
       : `Entre na conta @${conta.username} no navegador aberto. A sessão será salva automaticamente.`;
     p.tela?.informar(p.status, p.mensagem);
     // Verifica periodicamente, sem exigir ENTER no terminal.
@@ -114,6 +117,23 @@ async function iniciar(contaId, { remoto = null } = {}) {
     return estado(id);
   } catch (e) {
     await encerrar(p); processos.delete(id); throw e;
+  }
+}
+
+/**
+ * Tela remota: já deixa o @ do perfil no campo de usuário, para a pessoa só
+ * digitar a senha. Se a página do Instagram mudar, apenas não preenche.
+ */
+async function preencherUsuario(page, username) {
+  try {
+    const campo = page
+      .locator('input[name="username"], input[name="email"], input[autocomplete="username"], form input[type="text"]')
+      .first();
+    await campo.waitFor({ state: "visible", timeout: 20000 });
+    await campo.fill(username);
+    return true;
+  } catch {
+    return false;
   }
 }
 

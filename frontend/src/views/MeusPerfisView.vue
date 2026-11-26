@@ -48,7 +48,7 @@
                 :disabled="emAndamento(conta.id) && !conexao[conta.id]?.remoto"
                 @click="emAndamento(conta.id) ? abrirTela(conta) : conectar(conta)"
               >
-                {{ emAndamento(conta.id) ? (conexao[conta.id]?.remoto ? "Abrir tela" : "Aguardando login...") : conta.status === "expirada" ? "Reconectar" : "Conectar" }}
+                {{ emAndamento(conta.id) ? (conexao[conta.id]?.remoto ? "Continuar conexão" : "Aguardando login...") : conta.status === "expirada" ? "Reconectar Instagram" : "Conectar Instagram" }}
               </button>
             </li>
           </ul>
@@ -61,12 +61,17 @@
           <template v-else-if="podeConectar">
             <p v-if="contas.some((c) => c.status === 'expirada')" class="alerta alerta--erro">
               A conexão de um perfil com o Instagram <strong>expirou</strong> e as publicações nele estão
-              paradas. Clique em <strong>Reconectar</strong> e entre na sua conta de novo.
+              paradas. Toque em <strong>Reconectar Instagram</strong> e entre na sua conta de novo.
             </p>
-            <p v-if="contas.some((c) => seloDe(c).classe === 'selo--aviso')" class="alerta alerta--aviso">
-              Perfis <strong>aguardando conexão</strong> ainda não recebem publicações. Clique em
-              <strong>Conectar</strong> e entre na sua conta do Instagram na janela que abrir.
-            </p>
+            <div v-if="contas.some((c) => seloDe(c).classe === 'selo--aviso')" class="como-conectar">
+              <strong>Falta só conectar o seu Instagram (leva 1 minuto)</strong>
+              <ol>
+                <li>Toque em <strong>Conectar Instagram</strong>.</li>
+                <li>O Instagram abre aqui mesmo, com o seu usuário já preenchido.</li>
+                <li>Digite a sua senha e toque em <strong>Entrar</strong>. Se pedir um código, digite também.</li>
+              </ol>
+              <small>A sua senha vai direto para o Instagram e não é guardada pelo sistema.</small>
+            </div>
           </template>
           <template v-else>
             <p v-if="contas.some((c) => c.status === 'expirada')" class="alerta alerta--erro">
@@ -120,7 +125,7 @@
 
         <ol class="passos">
           <li>Você informa o @ aqui — <strong>sem senha</strong>.</li>
-          <li v-if="podeConectar">Você clica em <strong>Conectar</strong> e entra no Instagram pela tela que abrir.</li>
+          <li v-if="podeConectar">Você toca em <strong>Conectar Instagram</strong> e entra na sua conta ali mesmo.</li>
           <li v-else>A equipe conecta o perfil ao sistema com você.</li>
           <li>Pronto: o perfil passa a receber as publicações.</li>
         </ol>
@@ -147,6 +152,7 @@ import {
   consultarConexaoMeuPerfil,
   listarMinhasContas,
 } from "../api/minhaArea";
+import { useAtualizacaoAutomatica } from "../composables/useAtualizacaoAutomatica";
 
 const contas = ref([]);
 const carregando = ref(true);
@@ -178,8 +184,8 @@ function formatarDia(data) {
   return new Date(data).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
 }
 
-async function carregar() {
-  carregando.value = true;
+async function carregar({ silencioso = false } = {}) {
+  if (!silencioso) carregando.value = true;
   erro.value = "";
   try {
     contas.value = await listarMinhasContas();
@@ -309,6 +315,7 @@ async function conectar(conta) {
 }
 
 onMounted(carregar);
+useAtualizacaoAutomatica(() => carregar({ silencioso: true }));
 onBeforeUnmount(() => {
   for (const id of [...intervalos.keys()]) pararAcompanhamento(id);
 });
@@ -342,6 +349,30 @@ onBeforeUnmount(() => {
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+.como-conectar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid #c7dbff;
+  border-radius: 12px;
+  background: #f0f6ff;
+  color: #1e3a8a;
+  font-size: 14px;
+}
+
+.como-conectar ol {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.como-conectar small {
+  color: #475569;
 }
 
 .item {

@@ -8,18 +8,22 @@
   <ModalBase
     :titulo="`Conectar @${username}`"
     subtitulo="Entre na conta do Instagram pela tela abaixo."
-    :largura="480"
+    :largura="460"
     @fechar="fechar"
   >
     <div class="tela-remota">
       <p class="situacao" :class="`situacao--${tipoSituacao}`">{{ textoSituacao }}</p>
 
+      <ol v-if="!concluido" class="guia" aria-label="Como conectar">
+        <li :class="{ feito: Boolean(imagem) }"><span>1</span>Toque no campo da <strong>senha</strong></li>
+        <li><span>2</span>Digite no teclado que abrir</li>
+        <li><span>3</span>Toque em <strong>Entrar</strong></li>
+      </ol>
+
       <div
         ref="moldura"
         class="moldura"
-        tabindex="0"
         :style="{ aspectRatio: `${dimensao.w} / ${dimensao.h}` }"
-        @keydown="aoTeclar"
         @wheel.prevent="aoRolar"
       >
         <img
@@ -35,34 +39,39 @@
         </div>
       </div>
 
-      <form class="digitar" @submit.prevent="enviarTexto">
+      <label class="digitar" :class="{ 'digitar--ativo': digitando }">
+        <span>{{ digitando ? "Digitando no Instagram" : "Toque num campo da tela acima para digitar" }}</span>
         <input
+          ref="entrada"
           v-model="texto"
           class="campo"
           :type="ocultar ? 'password' : 'text'"
           autocomplete="off"
           autocapitalize="off"
+          autocorrect="off"
           spellcheck="false"
-          placeholder="Toque num campo acima e digite aqui"
+          enterkeyhint="go"
+          :placeholder="digitando ? 'O que você digitar aqui vai direto para o campo' : ''"
           :disabled="!ativo"
+          @input="aoDigitar"
+          @keydown="aoTeclar"
+          @focus="digitando = true"
+          @blur="digitando = false"
         />
-        <button class="botao botao--primario" type="submit" :disabled="!ativo || !texto">Enviar</button>
-      </form>
+      </label>
 
       <div class="teclas">
         <label class="ocultar"><input v-model="ocultar" type="checkbox" /> Ocultar o que digito</label>
         <div>
-          <button class="botao botao--secundario" type="button" :disabled="!ativo" @click="tecla('Backspace')">⌫ Apagar</button>
-          <button class="botao botao--secundario" type="button" :disabled="!ativo" @click="tecla('Enter')">↵ Enter</button>
-          <button class="botao botao--secundario" type="button" :disabled="!ativo" @click="rolar(400)">↓</button>
-          <button class="botao botao--secundario" type="button" :disabled="!ativo" @click="rolar(-400)">↑</button>
+          <button class="botao botao--secundario" type="button" :disabled="!ativo" @click="tecla('Backspace')">⌫</button>
+          <button class="botao botao--primario" type="button" :disabled="!ativo" @click="tecla('Enter')">Entrar ↵</button>
         </div>
       </div>
 
       <p class="nota">
-        Toque no campo do Instagram, digite na caixa acima e toque em <strong>Enviar</strong>. No
-        computador também dá para clicar na tela e digitar direto. A senha não é guardada: só a
-        sessão do Instagram, para publicar.
+        Esta é a tela do Instagram, aberta para você com segurança. A sua senha vai direto para o
+        Instagram e não é guardada. Se o Instagram pedir um código, ele chega no seu e-mail ou
+        celular: digite-o do mesmo jeito.
       </p>
     </div>
 
@@ -94,6 +103,10 @@ const conexaoCanal = ref("conectando");
 const texto = ref("");
 const ocultar = ref(true);
 const moldura = ref(null);
+const entrada = ref(null);
+const digitando = ref(false);
+/** O que já foi mandado para o campo do Instagram (para mandar só a diferença). */
+let enviado = "";
 
 let canal = null;
 let ola = null;
@@ -137,7 +150,36 @@ function aoTocar(evento) {
     x: (evento.clientX - caixa.left) / caixa.width,
     y: (evento.clientY - caixa.top) / caixa.height,
   });
-  moldura.value?.focus({ preventScroll: true });
+  // Novo campo: começa do zero e abre o teclado (no celular, só dentro do toque).
+  texto.value = "";
+  enviado = "";
+  entrada.value?.focus({ preventScroll: true });
+}
+
+/** Manda para o Instagram só o que mudou desde a última letra. */
+function aoDigitar() {
+  const novo = texto.value;
+  let comum = 0;
+  while (comum < novo.length && comum < enviado.length && novo[comum] === enviado[comum]) comum++;
+  for (let i = enviado.length; i > comum; i--) tecla("Backspace");
+  const acrescentado = novo.slice(comum);
+  if (acrescentado) enviar("texto", { texto: acrescentado });
+  enviado = novo;
+}
+
+const TECLAS_ESPECIAIS = ["Enter", "Tab", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"];
+function aoTeclar(evento) {
+  if (TECLAS_ESPECIAIS.includes(evento.key)) {
+    evento.preventDefault();
+    tecla(evento.key);
+    if (evento.key === "Enter") {
+      texto.value = "";
+      enviado = "";
+    }
+  } else if (evento.key === "Backspace" && !texto.value) {
+    // Campo já tinha texto lá no Instagram: apaga de lá.
+    tecla("Backspace");
+  }
 }
 
 function aoRolar(evento) {
@@ -150,25 +192,6 @@ function rolar(dy) {
 
 function tecla(nome) {
   enviar("tecla", { tecla: nome });
-}
-
-function enviarTexto() {
-  if (!texto.value) return;
-  enviar("texto", { texto: texto.value });
-  texto.value = "";
-}
-
-/** No computador: digitar com a tela selecionada vai direto para o Instagram. */
-const TECLAS = ["Enter", "Backspace", "Tab", "Escape", "Delete", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"];
-function aoTeclar(evento) {
-  if (evento.ctrlKey || evento.metaKey || evento.altKey) return;
-  if (TECLAS.includes(evento.key)) {
-    evento.preventDefault();
-    tecla(evento.key);
-  } else if (evento.key.length === 1) {
-    evento.preventDefault();
-    enviar("texto", { texto: evento.key });
-  }
 }
 
 function recarregar() {
@@ -292,14 +315,50 @@ onBeforeUnmount(() => {
   }
 }
 
-.digitar {
+.guia {
   display: flex;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
 }
 
-.digitar .campo {
-  flex: 1;
-  min-width: 0;
+.guia li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.guia span {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #1d4ed8;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.digitar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--cor-texto-suave);
+}
+
+.digitar--ativo {
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+.digitar--ativo .campo {
+  border-color: #1d4ed8;
+  box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.15);
 }
 
 .teclas {
