@@ -86,6 +86,7 @@ import {
   redefinirSenhaAdministrador,
 } from "../api/administradores";
 import { useSessao } from "../composables/useSessao";
+import { useAtualizacaoAutomatica } from "../composables/useAtualizacaoAutomatica";
 
 const { usuario } = useSessao();
 
@@ -159,6 +160,7 @@ async function alternarAtivo(adm) {
 }
 
 onMounted(carregar);
+useAtualizacaoAutomatica(carregar);
 </script>
 
 <style scoped>

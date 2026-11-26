@@ -198,6 +198,7 @@ import { deferirVarias, listarAprovacoes, responderAprovacao, retomarPublicacao 
 import { APROVACAO } from "../constants/publicacoes";
 import { useAprovacoesPendentes } from "../composables/useAprovacoesPendentes";
 import { formatarData } from "../utils/formatadores";
+import { useAtualizacaoAutomatica } from "../composables/useAtualizacaoAutomatica";
 
 const contador = useAprovacoesPendentes();
 
@@ -337,6 +338,7 @@ async function deferirSelecionadas() {
 }
 
 onMounted(carregar);
+useAtualizacaoAutomatica(() => carregar({ silencioso: true }));
 </script>
 
 <style scoped>

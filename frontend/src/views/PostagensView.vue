@@ -180,12 +180,18 @@ import { ABAS_FILTRO, APROVACAO, STATUS } from "../constants/publicacoes";
 import { formatarData } from "../utils/formatadores";
 import { useAlertasPerfis } from "../composables/useAlertasPerfis";
 import { usePublicacoes } from "../composables/usePublicacoes";
+import { useAtualizacaoAutomatica } from "../composables/useAtualizacaoAutomatica";
 
 const { carregando, erro, filtro, busca, cliente, clientes, filtradas, contagens, carregar } =
   usePublicacoes();
 
 const { perfisEmAtencao, atualizar: atualizarAlertas } = useAlertasPerfis();
 onMounted(() => atualizarAlertas({ forcar: true }));
+
+// Status das postagens e respostas dos clientes aparecem sozinhos.
+useAtualizacaoAutomatica(() =>
+  Promise.all([carregar({ silencioso: true }), atualizarAlertas({ forcar: true })])
+);
 
 /** Publicação cujos comentários estão abertos no modal (`null` = fechado). */
 const publicacaoAberta = ref(null);

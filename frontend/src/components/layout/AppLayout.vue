@@ -92,6 +92,7 @@ import { useRoute, useRouter } from "vue-router";
 import { useAlertasPerfis } from "../../composables/useAlertasPerfis";
 import { useAprovacoesPendentes } from "../../composables/useAprovacoesPendentes";
 import { usePublicador } from "../../composables/usePublicador";
+import { useAtualizacaoAutomatica } from "../../composables/useAtualizacaoAutomatica";
 import { useSessao } from "../../composables/useSessao";
 
 const router = useRouter();
@@ -100,6 +101,12 @@ const { usuario, ehAdmin, sair } = useSessao();
 const { totalEmAtencao, atualizar: atualizarAlertas } = useAlertasPerfis();
 const { totalPendentes, atualizar: atualizarAprovacoes } = useAprovacoesPendentes();
 const { desligado: publicadorDesligado, acompanhar: acompanharPublicador, parar: pararPublicador } = usePublicador();
+
+// Contadores do menu (perfis em atenção / aprovações) sem recarregar a página.
+useAtualizacaoAutomatica(
+  () => (ehAdmin.value ? atualizarAlertas({ forcar: true }) : atualizarAprovacoes({ forcar: true })),
+  { intervaloMs: 30 * 1000 }
+);
 const saindo = ref(false);
 
 // Administrador: confere o Publicador de 1 em 1 minuto (aviso no topo).

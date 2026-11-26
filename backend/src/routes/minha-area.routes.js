@@ -77,7 +77,18 @@ async function perfilDoCliente(req) {
 
 router.post("/contas/:id/conectar", async (req, res) => {
     const conta = await perfilDoCliente(req);
-    res.json(await automacao.conectar(conta.id));
+    try {
+        res.json(await automacao.conectar(conta.id));
+    } catch (erro) {
+        // O cliente não sabe o que é o Publicador: mensagem na linguagem dele.
+        if (erro instanceof ErroHttp && /Publicador está desligado/.test(erro.message)) {
+            throw new ErroHttp(
+                409,
+                "A conexão com o Instagram está indisponível agora. Tente de novo mais tarde ou fale com a equipe."
+            );
+        }
+        throw erro;
+    }
 });
 
 router.get("/contas/:id/conexao", async (req, res) => {
